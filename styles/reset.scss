@@ -109,8 +109,11 @@ textarea,
 select {
   font: inherit;
   border-radius: 0;
-  outline: none;
   box-shadow: none;
+  background-color: transparent;
+  appearance: none;
+  border-color: transparent;
+  outline-color: transparent;
 }
 
 select {

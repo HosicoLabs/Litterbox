@@ -90,6 +90,7 @@
       color: var(--color-orange);
       line-height: 1.2em;
       text-transform: uppercase;
+      white-space: nowrap;
 
       @include mixins.screen-size("md") {
         font-size: 8.125rem;
