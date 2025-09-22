@@ -37,3 +37,16 @@ button.disabled {
     font-size: 1rem;
   }
 }
+
+.body_bg {
+  display: none;
+
+  @include mixins.screen-size("md") {
+    display: block;
+    position: absolute;
+    z-index: var(--z-background);
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

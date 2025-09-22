@@ -1,6 +1,7 @@
 @use "../../Styles/mixins";
 
 .topnav {
+  font-family: var(--font-inter);
   color: var(--color-heading);
   position: fixed;
   width: 100%;

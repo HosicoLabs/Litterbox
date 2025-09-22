@@ -22,8 +22,7 @@
 // Regular
 @font-face {
   font-family: "Mona_Sans";
-  src: url("../public/font/mona_sans/Mona-Sans-RegularWide.ttf")
-    format("truetype");
+  src: url("/font/mona_sans/Mona-Sans-RegularWide.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -32,8 +31,7 @@
 // Medium
 @font-face {
   font-family: "Mona_Sans";
-  src: url("../public/font/mona_sans/Mona-Sans-MediumWide.ttf")
-    format("truetype");
+  src: url("/font/mona_sans/Mona-Sans-MediumWide.ttf") format("truetype");
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -42,7 +40,7 @@
 // Bold
 @font-face {
   font-family: "Mona_Sans";
-  src: url("../public/font/mona_sans/Mona-Sans-BoldWide.ttf") format("truetype");
+  src: url("/font/mona_sans/Mona-Sans-BoldWide.ttf") format("truetype");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -51,8 +49,7 @@
 // Black
 @font-face {
   font-family: "Mona_Sans";
-  src: url("../public/font/mona_sans/Mona-Sans-BlackWide.ttf")
-    format("truetype");
+  src: url("/font/mona_sans/Mona-Sans-BlackWide.ttf") format("truetype");
   font-weight: 900;
   font-style: normal;
   font-display: swap;
@@ -62,8 +59,7 @@
 // Regular
 @font-face {
   font-family: "Plus_Jakarta";
-  src: url("../public/font/plus_jakarta/PlusJakartaSans-Regular.otf")
-    format("otf");
+  src: url("/font/plus_jakarta/PlusJakartaSans-Regular.otf") format("otf");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -78,7 +74,7 @@
   --font-text: var(--font-switzer);
   --font-s-body: 16px;
   // colors
-  --color-background: #0f091a;
+  --color-background: #02000f;
   --color-white: #fff;
   --color-white-60: #ffffff60;
   --color-gray: #8f8f8f;
@@ -92,4 +88,5 @@
   // zIndex
   --z-normal: 1;
   --z-topnav: 2;
+  --z-background: -1;
 }

@@ -83,30 +83,45 @@
       }
     }
 
+    & .title {
+      font-family: var(--font-mona);
+      font-size: 3.25rem;
+      font-weight: 700;
+      color: var(--color-orange);
+      line-height: 1.2em;
+      text-transform: uppercase;
+
+      @include mixins.screen-size("md") {
+        font-size: 8.125rem;
+      }
+    }
+
     & .tagline {
-      font-size: 2.5rem;
+      font-size: 2.125rem;
       text-align: center;
       letter-spacing: -1.4px;
       line-height: 1.2em;
-      margin-block: 1.5rem 1.5rem;
-      max-width: 7em;
+      font-weight: 400;
+      max-width: 8em;
       margin-inline: auto;
+      color: var(--color-white);
+      margin-block: 1.25rem;
 
       @include mixins.screen-size("md") {
-        max-width: 11em;
-        font-size: 4.4rem;
-        margin-block: 1.25rem 1.5rem;
+        max-width: unset;
+        font-size: 2.5rem;
       }
     }
 
     & .description {
-      color: var(--color-text);
+      color: var(--color-white-60);
       text-align: center;
-      max-width: 25em;
+      max-width: 20em;
       margin-inline: auto;
       font-size: 0.8rem;
       @include mixins.screen-size("md") {
         font-size: 1.25rem;
+        max-width: 30em;
       }
     }
   }

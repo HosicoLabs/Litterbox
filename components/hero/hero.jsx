@@ -51,7 +51,7 @@ export function Hero() {
                 fill="white"
               />
             </svg>
-            <p>the future of commerce</p>
+            <p>HOSICO LITTER BOX</p>
           </div>
           <h1 className="title">litter box</h1>
           <p className="tagline">Turn your shitcoin and trash into $HOSICO</p>

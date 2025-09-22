@@ -12,6 +12,7 @@ export default function RootLayout({ children }) {
       <body>
         <Topnav />
         {children}
+        <img src="./body_bg.png" alt="" className="body_bg" />
       </body>
     </html>
   );
