@@ -1,0 +1,39 @@
+@use "./mixins";
+
+body {
+  overflow: hidden;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+ul,
+li {
+  list-style: none;
+}
+
+button {
+  appearance: none;
+  outline-color: transparent;
+  border-color: transparent;
+  cursor: pointer;
+}
+button.disabled {
+  pointer-events: none;
+}
+
+.heading {
+  text-transform: uppercase;
+  padding: 0.25rem 1rem;
+  border-radius: 1000px;
+  width: fit-content;
+  font-size: 0.75rem;
+  font-weight: 400;
+  border: 1px solid rgba(87, 76, 130, 0.6);
+  margin-bottom: 2.5rem;
+  @include mixins.screen-size("md") {
+    font-size: 1rem;
+  }
+}

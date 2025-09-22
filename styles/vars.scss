@@ -1,0 +1,95 @@
+// ============ Inter
+// Regular
+@font-face {
+  font-family: "Inter";
+  src: url("/font/inter/Inter-Regular.otf") format("otf");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+// ============ Switzer
+// Regular
+@font-face {
+  font-family: "Switzer";
+  src: url("/font/switzer/Switzer-Regular.otf") format("otf");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+// ============ Mona sans
+// Regular
+@font-face {
+  font-family: "Mona_Sans";
+  src: url("../public/font/mona_sans/Mona-Sans-RegularWide.ttf")
+    format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+// Medium
+@font-face {
+  font-family: "Mona_Sans";
+  src: url("../public/font/mona_sans/Mona-Sans-MediumWide.ttf")
+    format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+// Bold
+@font-face {
+  font-family: "Mona_Sans";
+  src: url("../public/font/mona_sans/Mona-Sans-BoldWide.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+// Black
+@font-face {
+  font-family: "Mona_Sans";
+  src: url("../public/font/mona_sans/Mona-Sans-BlackWide.ttf")
+    format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+// ============ Plus jakarta
+// Regular
+@font-face {
+  font-family: "Plus_Jakarta";
+  src: url("../public/font/plus_jakarta/PlusJakartaSans-Regular.otf")
+    format("otf");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --font-switzer: "Switzer", sans-serif;
+  --font-jakarta: "Plus_Jakarta", sans-serif;
+  --font-mona: "Mona_Sans", sans-serif;
+  --font-inter: "Inter", sans-serif;
+  --font-heading: var(--font-mona);
+  --font-text: var(--font-switzer);
+  --font-s-body: 16px;
+  // colors
+  --color-background: #0f091a;
+  --color-white: #fff;
+  --color-white-60: #ffffff60;
+  --color-gray: #8f8f8f;
+  --color-orange: #ffbb00;
+  --color-orange-light: #f9f7e0;
+  --color-blue-light: #b4c8ff;
+  --color-gray-border: #3d3d3d;
+
+  --color-heading: var(--color-white);
+  --color-text: var(--color-gray);
+  // zIndex
+  --z-normal: 1;
+  --z-topnav: 2;
+}

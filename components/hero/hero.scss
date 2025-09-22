@@ -1,0 +1,113 @@
+@use "../../Styles/mixins";
+
+.hero {
+  position: relative;
+  background-color: var(--color-background);
+
+  & .bg {
+    position: absolute;
+    inset: 0 0 0 0;
+    width: 100%;
+    height: 100%;
+
+    @include mixins.screen-size("md") {
+      translate: 0 -4%;
+    }
+  }
+
+  & .content {
+    position: relative;
+    z-index: var(--z-normal);
+    width: fit-content;
+    margin-inline: auto;
+    padding: 8rem 1.5rem 0.5rem;
+    overflow: hidden;
+
+    @include mixins.screen-size("md") {
+      overflow: visible;
+      padding: 25vh 1rem 0;
+    }
+
+    & .heading {
+      position: relative;
+      --border-color: rgba(87, 76, 130, 0.6);
+      margin-inline: auto;
+      width: fit-content;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+
+      &::before,
+      &::after {
+        content: "";
+        position: absolute;
+        width: 30%;
+        height: 30vh;
+        bottom: 50%;
+        border-radius: 1rem;
+        border-bottom: 1px solid var(--border-color);
+
+        @include mixins.screen-size("md") {
+          width: 100%;
+        }
+      }
+
+      &::before {
+        border-left: 1px solid var(--border-color);
+        transform: skew(45deg);
+        right: 97%;
+        translate: -200% 0;
+
+        @include mixins.screen-size("md") {
+          translate: -50% 0;
+        }
+      }
+      &::after {
+        left: 97%;
+        transform: skew(-45deg);
+        border-right: 1px solid var(--border-color);
+        translate: 200% 0;
+
+        @include mixins.screen-size("md") {
+          translate: 50% 0;
+        }
+      }
+
+      & p {
+        color: var(--color-white);
+        font-size: 0.75rem;
+        @include mixins.screen-size("md") {
+          font-size: 1rem;
+        }
+      }
+    }
+
+    & .tagline {
+      font-size: 2.5rem;
+      text-align: center;
+      letter-spacing: -1.4px;
+      line-height: 1.2em;
+      margin-block: 1.5rem 1.5rem;
+      max-width: 7em;
+      margin-inline: auto;
+
+      @include mixins.screen-size("md") {
+        max-width: 11em;
+        font-size: 4.4rem;
+        margin-block: 1.25rem 1.5rem;
+      }
+    }
+
+    & .description {
+      color: var(--color-text);
+      text-align: center;
+      max-width: 25em;
+      margin-inline: auto;
+      font-size: 0.8rem;
+      @include mixins.screen-size("md") {
+        font-size: 1.25rem;
+      }
+    }
+  }
+}
