@@ -1,0 +1,136 @@
+@use "../../styles/mixins";
+
+.footer {
+  position: relative;
+  overflow: hidden;
+  min-height: 489px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 15, 200, 0) 0%,
+    rgba(0, 15, 200, 0.48) 39.82%,
+    #000fc8 65.06%,
+    #000 100%
+  );
+
+  @include mixins.screen-size("md") {
+    background: linear-gradient(
+      180deg,
+      rgba(0, 15, 200, 0) 0%,
+      rgba(0, 15, 200, 0.24) 39.82%,
+      rgba(0, 15, 200, 0.5) 65.06%,
+      rgba(0, 0, 0, 0.5) 100%
+    );
+  }
+
+  & .img_bg {
+    translate: 0 min(70%, 11rem);
+    opacity: 0.5;
+
+    @include mixins.screen-size("md") {
+      translate: 0 0;
+    }
+  }
+
+  & .disclaimer {
+    display: none;
+    position: absolute;
+    width: 100%;
+    z-index: var(--z-normal);
+    top: 0;
+    left: 0;
+
+    & i {
+      display: block;
+    }
+
+    @include mixins.screen-size("md") {
+      display: block;
+    }
+  }
+
+  & .title {
+    color: var(--color-orange);
+    font-weight: 900;
+    font-family: var(--font-mona);
+    font-size: 3.5rem;
+    text-align: center;
+
+    @include mixins.screen-size("md") {
+      font-size: 7.5rem;
+      text-align: left;
+    }
+  }
+
+  & .content {
+    position: absolute;
+    z-index: var(--z-normal);
+    width: 100%;
+    bottom: 0;
+    left: 0;
+
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+
+    @include mixins.screen-size("md") {
+      gap: 4.325rem;
+      flex-direction: column;
+    }
+
+    & .links_container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      @include mixins.screen-size("md") {
+        gap: 3rem;
+      }
+
+      & .link {
+        text-transform: capitalize;
+        padding: 0.5rem;
+        border-radius: 50%;
+        background-color: var(--color-white);
+
+        @include mixins.screen-size("md") {
+          background-color: transparent;
+          order: unset;
+        }
+
+        & .label {
+          display: none;
+          @include mixins.screen-size("md") {
+            display: block;
+            font-size: 2rem;
+            font-family: var(--font-mona);
+            text-transform: capitalize;
+          }
+        }
+        & .icon {
+          display: block;
+          height: 1.5rem;
+          width: 1.5rem;
+          @include mixins.screen-size("md") {
+            display: none;
+          }
+        }
+      }
+
+      & .link:nth-child(2) {
+        order: 3;
+      }
+      & .link:nth-child(3) {
+        order: 4;
+      }
+      & .link:nth-child(4) {
+        order: 2;
+        margin-right: 30vw;
+        @include mixins.screen-size("md") {
+          margin-right: 0;
+        }
+      }
+    }
+  }
+}
