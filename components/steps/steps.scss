@@ -1,0 +1,80 @@
+@use "../../styles/mixins";
+
+.steps_container {
+  --gap: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  flex-direction: row;
+  justify-content: center;
+  padding: 5.125rem 1.25rem 1.25rem 1.25rem;
+
+  @include mixins.screen-size("md") {
+    --gap: 1.25rem;
+    padding: 5rem 6.125rem 4.35rem 6.125rem;
+  }
+
+  & .step {
+    position: relative;
+    z-index: var(--z-normal);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-basis: calc(50% - var(--gap));
+    min-width: 8rem;
+    padding: 0.8rem;
+
+    @include mixins.screen-size("md") {
+      padding: 1rem;
+      flex-basis: calc(25% - var(--gap) * 3);
+    }
+
+    &::before {
+      display: block;
+      content: "";
+      position: absolute;
+      inset: 0 0 0 0;
+      width: 100%;
+      height: 100%;
+      background-image: url(/step_bg.png);
+      background-size: cover;
+      background-repeat: no-repeat;
+      z-index: var(--z-background);
+      opacity: 0.8;
+    }
+
+    & .number {
+      font-family: var(--font-mona);
+      font-weight: 700;
+      line-height: 1.2em;
+      font-size: 1.125rem;
+      margin-bottom: 0.25rem;
+
+      @include mixins.screen-size("md") {
+        font-size: 2.125rem;
+        margin-bottom: 0.5rem;
+      }
+    }
+
+    & .title {
+      font-family: var(--font-mona);
+      font-weight: 500;
+      margin-bottom: 1.225rem;
+      font-size: 0.8rem;
+
+      @include mixins.screen-size("md") {
+        font-size: 1.5rem;
+        margin-bottom: 2.5rem;
+      }
+    }
+
+    & .desc {
+      font-size: 0.5rem;
+      width: 100%;
+      color: var(--color-blue-light);
+      @include mixins.screen-size("md") {
+        font-size: 1rem;
+      }
+    }
+  }
+}

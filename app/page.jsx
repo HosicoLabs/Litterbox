@@ -1,10 +1,11 @@
 import { Hero } from "@/components/hero/hero";
+import { Steps } from "@/components/steps/steps";
 
 export default function Home() {
   return (
     <main>
       <Hero />
-      <h1>litter box</h1>
+      <Steps />
     </main>
   );
 }
