@@ -12,7 +12,14 @@ export default function RootLayout({ children }) {
       <body>
         <Topnav />
         {children}
-        <img src="./body_bg.png" alt="" className="body_bg" />
+        <video
+          className="body_bg"
+          src="/hero_bg.mp4"
+          muted
+          autoPlay
+          loop
+          playsInline
+        />
       </body>
     </html>
   );

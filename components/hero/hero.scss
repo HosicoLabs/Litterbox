@@ -2,7 +2,13 @@
 
 .hero {
   position: relative;
-  background-color: var(--color-background);
+  background: var(--color-background);
+  background: linear-gradient(
+    180deg,
+    rgba(2, 0, 15, 1) 0%,
+    rgba(2, 0, 15, 0.5) 66%,
+    rgba(2, 0, 15, 0) 99%
+  );
 
   & .bg {
     position: absolute;
