@@ -10,17 +10,17 @@ const SERACH_ICON = (
     <path
       d="M21 21L17.5001 17.5M20 11.5C20 16.1944 16.1944 20 11.5 20C6.80558 20 3 16.1944 3 11.5C3 6.80558 6.80558 3 11.5 3C16.1944 3 20 6.80558 20 11.5Z"
       stroke="#FFBB00"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
     <path
       d="M21 21L17.5001 17.5M20 11.5C20 16.1944 16.1944 20 11.5 20C6.80558 20 3 16.1944 3 11.5C3 6.80558 6.80558 3 11.5 3C16.1944 3 20 6.80558 20 11.5Z"
       stroke="black"
-      stroke-opacity="0.2"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      strokeOpacity="0.2"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
@@ -28,18 +28,22 @@ const SERACH_ICON = (
 const CHECKBOX_ICON = (
   <svg
     className="icon icon_checkbox"
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
     fill="none"
+    xmlns="http://www.w3.org/2000/svg"
   >
     <path
-      d="M10 3L4.5 8.5L2 6"
+      d="M0 4C0 1.79086 1.79086 0 4 0H12C14.2091 0 16 1.79086 16 4V12C16 14.2091 14.2091 16 12 16H4C1.79086 16 0 14.2091 0 12V4Z"
+      fill="#FFBB00"
+    />
+    <path
+      d="M12 5L6.5 10.5L4 8"
       stroke="white"
-      stroke-width="1.6666"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      strokeWidth="1.6666"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
@@ -56,9 +60,9 @@ const CHEVDOWN_ICON = (
     <path
       d="M4.25 6.125L8 9.875L11.75 6.125"
       stroke="#FFBB00"
-      stroke-width="0.75"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      strokeWidth="0.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   </svg>
 );
@@ -92,6 +96,21 @@ export function Statistics() {
             {CHEVDOWN_ICON}
           </div>
         </div>
+        <table className="table">
+          <thead>
+            <tr className="thead">
+              <th className="thead_col">
+                {CHECKBOX_ICON}
+                <span>symbol</span>
+              </th>
+              <th className="thead_col">balance</th>
+              <th className="thead_col">value (Sol)</th>
+              <th className="thead_col">fee ($Hosico)</th>
+              <th className="thead_col">token list</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
       <div className="right">
         <ul className="convertion_container">

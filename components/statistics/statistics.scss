@@ -21,6 +21,7 @@
   & > * {
     border: 0.5125rem;
     padding: 1.75rem 1.1rem;
+    border-radius: 0.5125rem;
 
     @include mixins.screen-size("md") {
       border-radius: 0.75rem;
@@ -122,10 +123,11 @@
 
   & .convertion {
     padding: 6px 9px;
-    font-size: 0.9rem;
     opacity: 0.6;
+    font-size: 0.625rem;
 
     @include mixins.screen-size("md") {
+      font-size: 0.9rem;
       padding: 0.5rem 0.75rem;
       font-size: 0.625rem;
     }
@@ -156,5 +158,42 @@
       rgba(29, 32, 52, 0.4) 100%
     );
     box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.02);
+  }
+
+  & .table {
+    width: 100%;
+    margin-top: 1.26rem;
+    border-collapse: collapse;
+    font-size: 0.625rem;
+
+    @include mixins.screen-size("md") {
+      margin-bottom: 1.75rem;
+      font-size: 0.8rem;
+    }
+
+    & .thead_col {
+      border: 1px solid #464964;
+      border-left-color: transparent;
+      border-right-color: transparent;
+
+      font-weight: 400;
+      padding-block: 0.5rem;
+      text-transform: capitalize;
+      text-align: center;
+
+      @include mixins.screen-size("md") {
+        padding-block: 0.625rem;
+      }
+
+      & .icon {
+        width: 0.75rem;
+        height: 0.75rem;
+        translate: 0 25%;
+        margin-right: 0.5rem;
+        @include mixins.screen-size("md") {
+          margin-right: 0.75rem;
+        }
+      }
+    }
   }
 }
