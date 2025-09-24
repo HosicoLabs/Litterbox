@@ -92,7 +92,7 @@
   & .convertion_container {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.365rem;
 
     @include mixins.screen-size("md") {
       gap: 1.75rem;
@@ -122,14 +122,14 @@
   }
 
   & .convertion {
-    padding: 6px 9px;
+    padding: 1rem 0.625rem;
     opacity: 0.6;
     font-size: 0.625rem;
 
     @include mixins.screen-size("md") {
       font-size: 0.9rem;
-      padding: 0.5rem 0.75rem;
-      font-size: 0.625rem;
+      padding: 1.365rem 0.75rem;
+      font-size: 0.8rem;
     }
 
     & .amount {

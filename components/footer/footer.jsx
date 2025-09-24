@@ -85,7 +85,10 @@ const LINKS = [
 export function Footer() {
   return (
     <div className="footer">
-      <img src="/footer_bg.webp" alt="" className="img img_bg" />
+      <picture className="img img_bg">
+        <source media="(min-width:768px)" srcSet="/footer_bg.webp" />
+        <img src="/footer_bg_sm.webp" alt="" />
+      </picture>
       <p className="disclaimer">
         Token accounts for discarded assets are closed, returning the rent to
         you as SOL. (Typically 0.0024 SOL per account closed).{" "}

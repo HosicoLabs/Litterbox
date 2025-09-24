@@ -24,7 +24,7 @@ export function Steps() {
           <li key={i} className="step">
             <span className="number">0{i + 1}</span>
             <p className="title">{el.title}</p>
-            <div className="desc">{el.desc}</div>
+            <p className="desc">{el.desc}</p>
           </li>
         );
       })}

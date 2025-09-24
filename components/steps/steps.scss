@@ -10,7 +10,7 @@
   padding: 5.125rem 1.25rem 1.25rem 1.25rem;
 
   @include mixins.screen-size("md") {
-    --gap: 1.25rem;
+    --gap: 1.5rem;
     padding: 5rem 6.125rem 4.35rem 6.125rem;
   }
 
@@ -24,6 +24,7 @@
     min-width: 8rem;
     padding: 0.8rem;
 
+    aspect-ratio: 288/300;
     @include mixins.screen-size("md") {
       padding: 1rem;
       flex-basis: calc(25% - var(--gap) * 3);
@@ -37,6 +38,7 @@
       width: 100%;
       height: 100%;
       background-image: url(/step_bg.png);
+
       background-size: cover;
       background-repeat: no-repeat;
       z-index: var(--z-background);
@@ -69,9 +71,11 @@
     }
 
     & .desc {
-      font-size: 0.5rem;
+      font-size: 0.6rem;
       width: 100%;
       color: var(--color-blue-light);
+      max-width: 15.5em;
+      align-self: flex-start;
       @include mixins.screen-size("md") {
         font-size: 1rem;
       }

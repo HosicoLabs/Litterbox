@@ -26,7 +26,7 @@
     z-index: var(--z-normal);
     width: fit-content;
     margin-inline: auto;
-    padding: 8rem 1.5rem 0.5rem;
+    padding: 12rem 1.5rem 0.5rem;
     overflow: hidden;
 
     @include mixins.screen-size("md") {
@@ -48,7 +48,7 @@
       &::after {
         content: "";
         position: absolute;
-        width: 30%;
+        width: 50%;
         height: 30vh;
         bottom: 50%;
         border-radius: 1rem;
@@ -63,7 +63,7 @@
         border-left: 1px solid var(--border-color);
         transform: skew(45deg);
         right: 97%;
-        translate: -200% 0;
+        translate: -150% 0;
 
         @include mixins.screen-size("md") {
           translate: -50% 0;
@@ -73,7 +73,7 @@
         left: 97%;
         transform: skew(-45deg);
         border-right: 1px solid var(--border-color);
-        translate: 200% 0;
+        translate: 150% 0;
 
         @include mixins.screen-size("md") {
           translate: 50% 0;
