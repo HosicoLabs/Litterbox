@@ -28,9 +28,10 @@
       background-image: linear-gradient(
         180deg,
         var(--color-background) 0%,
+        #ffffff00 20%,
         #ffffff00 30%,
-        rgba(0, 13, 200, 0.244) 75.06%,
-        var(--color-background) 95%
+        rgba(0, 13, 200, 0.418) 75.06%,
+        var(--color-background) 100%
       );
     }
   }

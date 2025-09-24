@@ -27,7 +27,7 @@
     aspect-ratio: 288/300;
     @include mixins.screen-size("md") {
       padding: 1rem;
-      flex-basis: calc(25% - var(--gap) * 3);
+      flex-basis: calc(25% - var(--gap));
     }
 
     &::before {
@@ -77,7 +77,7 @@
       max-width: 15.5em;
       align-self: flex-start;
       @include mixins.screen-size("md") {
-        font-size: 1.25rem;
+        font-size: 1rem;
       }
     }
   }
