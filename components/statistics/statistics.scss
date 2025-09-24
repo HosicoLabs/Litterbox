@@ -170,6 +170,7 @@
     @include mixins.screen-size("md") {
       margin-bottom: 1.75rem;
       font-size: 0.8rem;
+      min-height: 40rem;
     }
 
     & .thead_col {
