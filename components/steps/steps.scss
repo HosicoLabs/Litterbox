@@ -7,7 +7,7 @@
   gap: var(--gap);
   flex-direction: row;
   justify-content: center;
-  padding: 5.125rem 1.25rem 1.25rem 1.25rem;
+  padding: 5.125rem 1rem 1.25rem 1rem;
 
   @include mixins.screen-size("md") {
     --gap: 1.5rem;
@@ -30,17 +30,13 @@
       flex-basis: calc(25% - var(--gap));
     }
 
-    &::before {
-      display: block;
-      content: "";
+    & .step_bg {
       position: absolute;
-      inset: 0 0 0 0;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      background-image: url(/step_bg.png);
 
-      background-size: cover;
-      background-repeat: no-repeat;
       z-index: var(--z-background);
       opacity: 0.8;
     }
