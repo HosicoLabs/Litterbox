@@ -22,9 +22,6 @@ export function Steps() {
       {STEPS.map((el, i) => {
         return (
           <li key={i} className="step">
-            <div className="bg">
-              <img src="/step_bg.png" alt="bg" className="img step_bg" />
-            </div>
             <span className="number">0{i + 1}</span>
             <p className="title">{el.title}</p>
             <p className="desc">{el.desc}</p>
