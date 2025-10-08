@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WalletDropdown } from "../wallet-dropdown/wallet-dropdown";
 
 export function Topnav() {
   const [opened, setOpened] = useState(false);
@@ -109,7 +110,8 @@ export function Topnav() {
         <li className="link link-end">
           <a href="#">
             <span className="circle"></span>
-            Connect Wallet
+
+            <WalletDropdown />
           </a>
         </li>
       </ul>
