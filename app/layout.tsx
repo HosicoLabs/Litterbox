@@ -1,12 +1,14 @@
+import { Metadata } from "next";
 import "./index.scss";
 import { Topnav } from "@/components/topnav/topnav";
+import { JSX } from "react";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Hosico Litter Box",
   description: "Turn your shitcoin and trash into $HOSICO",
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }): JSX.Element {
   return (
     <html lang="en">
       <body>

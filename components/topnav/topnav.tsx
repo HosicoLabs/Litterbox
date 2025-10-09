@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { JSX, useState } from "react";
 
-export function Topnav() {
-  const [opened, setOpened] = useState(false);
-  const [target, setTarget] = useState("#");
+export function Topnav(): JSX.Element {
+  const [opened, setOpened] = useState<boolean>(false);
+  const [target, setTarget] = useState<string>("#");
 
-  const URLS = [
+  const URLS: {
+    url: string;
+    label: string;
+  }[] = [
     {
       url: "#",
       label: "Home",

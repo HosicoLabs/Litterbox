@@ -1,4 +1,6 @@
-const SERACH_ICON = (
+import { JSX } from "react";
+
+const SERACH_ICON: JSX.Element = (
   <svg
     className="icon icon_search"
     xmlns="http://www.w3.org/2000/svg"
@@ -25,7 +27,7 @@ const SERACH_ICON = (
   </svg>
 );
 
-const CHECKBOX_ICON = (
+const CHECKBOX_ICON: JSX.Element = (
   <svg
     className="icon icon_checkbox"
     width="16"
@@ -48,7 +50,7 @@ const CHECKBOX_ICON = (
   </svg>
 );
 
-const CHEVDOWN_ICON = (
+const CHEVDOWN_ICON: JSX.Element = (
   <svg
     className="icon icon_chevdown"
     xmlns="http://www.w3.org/2000/svg"
@@ -67,7 +69,7 @@ const CHEVDOWN_ICON = (
   </svg>
 );
 
-const CONVERTION_AVAIL = [
+const CONVERTION_AVAIL: { amount: number; status: string }[] = [
   {
     amount: 625,
     status: "possible convert",
@@ -78,7 +80,7 @@ const CONVERTION_AVAIL = [
   },
 ];
 
-export function Statistics() {
+export function Statistics(): JSX.Element {
   return (
     <div id="statsistics" className="statistics">
       <div className="left">

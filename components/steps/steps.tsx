@@ -1,4 +1,9 @@
-const STEPS = [
+import { JSX } from "react";
+
+const STEPS: {
+  title: string;
+  desc: string;
+}[] = [
   {
     title: "Connect & Scan",
     desc: "Connect your wallet and let Litter Box analyze its contents. It detects unwanted tokens, spam airdrops, and closeable accounts, then organizes them into a simple list for review.",
@@ -16,7 +21,7 @@ const STEPS = [
     desc: "Confirm your selection with a single signature.Litter Box will close token accounts, reclaim rent, and swap or burn the tokens, leaving your wallet clean and optimized.",
   },
 ];
-export function Steps() {
+export function Steps(): JSX.Element {
   return (
     <ul id="steps" className="steps_container">
       {STEPS.map((el, i) => {
