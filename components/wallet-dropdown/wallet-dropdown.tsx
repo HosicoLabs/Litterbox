@@ -6,11 +6,11 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from '../../src/components/ui/dropdown-menu'
 import * as React from 'react'
 import { ellipsify, UiWallet, useWalletUi, useWalletUiWallet } from '@wallet-ui/react'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '../../src/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '../../src/components/ui/avatar'
 import { cn } from '@/lib/utils'
 
 function WalletAvatar({ className, wallet }: { className?: string; wallet: UiWallet }) {

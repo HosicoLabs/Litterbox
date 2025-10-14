@@ -1,5 +1,6 @@
 'use client'
 
+import { SolanaCluster } from '@wallet-ui/react'
 import {
   createDefaultAuthorizationCache,
   createDefaultChainSelector,
@@ -10,6 +11,9 @@ import {
 export function solanaMobileWalletAdapter({
   appIdentity = { name: 'Wallet UI' },
   clusters,
+}: {
+  appIdentity?: { uri?: string; icon?: string; name?: string }
+  clusters: SolanaCluster[]
 }) {
   if (typeof window === 'undefined') {
     return
