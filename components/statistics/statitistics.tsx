@@ -4,11 +4,10 @@ import { useEffect, useState } from "react";
 import {
   createTransaction,
   address,
-  signAndSendTransactionMessageWithSigners,
-  getBase58Decoder,
   SolanaClient,
   compileTransaction,
-  getBase64EncodedWireTransaction
+  getBase64EncodedWireTransaction,
+  AccountRole
 } from "gill";
 import { TokenListProvider, ENV as TokenListEnv } from "@solana/spl-token-registry";
 import { UiWalletAccount, useSignAndSendTransaction, useWalletUiSigner } from "@wallet-ui/react";
@@ -141,6 +140,58 @@ export function Statistics({
     }
   };
 
+  const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
+    try {
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosicoMint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+
+      const response = await fetch(quoteUrl);
+
+      console.log("Jupiter quote response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Quote API error response:", errorText);
+        throw new Error(`Quote API error: ${response.status} - ${errorText}`);
+      }
+
+      const quoteResponse = await response.json();
+      console.log("Quote response:", quoteResponse);
+
+      const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap-instructions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quoteResponse,
+          userPublicKey: publicKey,
+          dynamicComputeUnitLimit: true,
+          dynamicSlippage: true,
+          prioritizationFeeLamports: {
+            priorityLevelWithMaxLamports: {
+              maxLamports: 1000000,
+              priorityLevel: "veryHigh"
+            }
+          }
+        })
+      });
+
+      if (!swapResponse.ok) {
+        const errorText = await swapResponse.text();
+        console.error("Swap Instructions API error response:", errorText);
+        throw new Error(`Swap Instructions API error: ${swapResponse.status} - ${errorText}`);
+      }
+
+      const swapData = await swapResponse.json();
+      console.log("Swap instructions response:", swapData);
+
+      return swapData;
+    } catch (error) {
+      console.error('Jupiter swap instructions error:', error);
+      throw error;
+    }
+  };
+
   const createCloseAccountInstruction = (
     tokenAccountPubkey: string,
     destination: string,
@@ -260,17 +311,88 @@ export function Statistics({
         return;
       }
 
-      setTransactionStatus(`Executing batch transaction to close ${closeInstructions.length} accounts...`);
+      setTransactionStatus(`Creating swap instruction for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO...`);
+
+      let allInstructions = [...closeInstructions];
+      console.log("totalSolToRecover", totalSolToRecover)
+      // Add SOL to HOSICO swap instruction if amount is significant
+      if (totalSolToRecover > 0.001) {
+        try {
+          const swapInstructionsData = await getJupiterSwapInstructions(
+            'So11111111111111111111111111111111111111112', // SOL mint
+            totalSolToRecover
+          );
+
+          // Parse and add swap instructions
+          if (swapInstructionsData.setupInstructions) {
+            // Add setup instructions first
+            for (const setupInstruction of swapInstructionsData.setupInstructions) {
+              const parsedInstruction = {
+                programAddress: address(setupInstruction.programId),
+                accounts: setupInstruction.accounts.map((acc: any) => ({
+                  address: address(acc.pubkey),
+                  role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
+                        acc.isSigner ? AccountRole.READONLY_SIGNER :
+                        acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+                })),
+                data: new Uint8Array(Buffer.from(setupInstruction.data, 'base64'))
+              };
+              allInstructions.push(parsedInstruction);
+            }
+          }
+
+          // Add main swap instruction
+          if (swapInstructionsData.swapInstruction) {
+            const swapInstruction = swapInstructionsData.swapInstruction;
+            const parsedSwapInstruction = {
+              programAddress: address(swapInstruction.programId),
+              accounts: swapInstruction.accounts.map((acc: any) => ({
+                address: address(acc.pubkey),
+                role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
+                      acc.isSigner ? AccountRole.READONLY_SIGNER :
+                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+              })),
+              data: new Uint8Array(Buffer.from(swapInstruction.data, 'base64'))
+            };
+            allInstructions.push(parsedSwapInstruction);
+          }
+
+          // Add cleanup instructions if any
+          if (swapInstructionsData.cleanupInstructions) {
+            for (const cleanupInstruction of swapInstructionsData.cleanupInstructions) {
+              const parsedInstruction = {
+                programAddress: address(cleanupInstruction.programId),
+                accounts: cleanupInstruction.accounts.map((acc: any) => ({
+                  address: address(acc.pubkey),
+                  role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
+                        acc.isSigner ? AccountRole.READONLY_SIGNER :
+                        acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+                })),
+                data: new Uint8Array(Buffer.from(cleanupInstruction.data, 'base64'))
+              };
+              allInstructions.push(parsedInstruction);
+            }
+          }
+
+          console.log(`Added Jupiter swap instructions for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO`);
+
+        } catch (swapError) {
+          console.warn('Failed to create swap instruction, proceeding with close-only transaction:', swapError);
+          setTransactionStatus(`⚠️ Could not create swap instruction, proceeding to close accounts only...`);
+        }
+      }
+
+      setTransactionStatus(`Executing batch transaction: ${closeInstructions.length} close + swap instructions...`);
 
       // Get the latest blockhash for the transaction
       const { value: latestBlockhash } = await client.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
 
-      // Create single transaction with all close instructions
+      // Create single transaction with all instructions (close + swap)
       const batchTransaction = createTransaction({
         feePayer: address(publicKey),
         version: 0,
         latestBlockhash,
-        instructions: closeInstructions,
+        instructions: allInstructions,
       });
 
       // Compile and serialize the transaction
@@ -280,36 +402,15 @@ export function Statistics({
       // Execute the batch transaction
       const batchSignature = await executeTransaction(
         serializedTransaction, 
-        `Close ${closeInstructions.length} token accounts`
+        `Close ${closeInstructions.length} accounts & swap to $HOSICO`
       );
 
       console.log(`Batch transaction completed: ${batchSignature}`);
 
-      setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts! Recovered ~${totalSolToRecover.toFixed(3)} SOL`);
-
-      // Swap recovered SOL to HOSICO if amount is significant
       if (totalSolToRecover > 0.001) {
-        try {
-          setTransactionStatus(`Swapping recovered SOL (${totalSolToRecover.toFixed(3)}) to $HOSICO...`);
-
-          const solSwapTx = await getJupiterSwapTransaction(
-            'So11111111111111111111111111111111111111112',
-            totalSolToRecover
-          );
-
-          if (solSwapTx) {
-            const solSwapSignature = await executeTransaction(
-              solSwapTx,
-              `Swap recovered SOL to HOSICO`
-            );
-            console.log(`SOL swap completed: ${solSwapSignature}`);
-            setTransactionStatus(`✅ Batch processed ${closeInstructions.length} accounts and swapped ${totalSolToRecover.toFixed(3)} SOL to $HOSICO!`);
-          }
-
-        } catch (solSwapError) {
-          console.warn(`Failed to swap recovered SOL:`, solSwapError);
-          setTransactionStatus(`✅ Closed ${closeInstructions.length} accounts but SOL swap failed: ${solSwapError instanceof Error ? solSwapError.message : 'Unknown error'}`);
-        }
+        setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts and swapped ${totalSolToRecover.toFixed(3)} SOL to $HOSICO!`);
+      } else {
+        setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts! Recovered ~${totalSolToRecover.toFixed(3)} SOL`);
       }
 
       // Clear selection after successful batch transaction
@@ -477,8 +578,8 @@ export function Statistics({
 
         // Fetch token accounts from both programs
         const [standardTokensResp, token2022Resp] = await Promise.all([
-          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "finalized" }).send(),
-          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "finalized" }).send()
+          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send(),
+          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send()
         ]);
 
         console.log("Standard token accounts response:", standardTokensResp);
@@ -526,7 +627,7 @@ export function Statistics({
 
         let sol = null;
         try {
-          const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "finalized" });
+          const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "confirmed" });
           const balResp = await balRespPromise.send();
           const lamports = typeof balResp === "number" ? balResp : ((balResp as any)?.value ?? null);
           if (lamports != null) {
