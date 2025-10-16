@@ -581,25 +581,56 @@ export function Statistics({
             if (item?.account?.data?.parsed?.info?.mint === config.tokens.hosico.mint) return null;
             if (item?.account?.data?.parsed?.info?.mint === config.tokens.sol.mint) return null;
 
-            if (item?.account?.data?.parsed?.info?.tokenAmount?.uiAmount === 0) {
+            const parsed = item.account?.data?.parsed ?? {};
+            const info = parsed.info ?? {};
+            const tokenAmount = info.tokenAmount ?? {};
+            const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
+
+            if (uiAmount === 0) {
               const pubkey = item.pubkey;
-              const parsed = item.account?.data?.parsed ?? {};
-              const info = parsed.info ?? {};
               const mint = info.mint;
               const owner = info.owner;
-              const tokenAmount = info.tokenAmount ?? {};
-              const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
 
+              const state = info.state;
+              const closeAuthority = info.closeAuthority;
+              const delegate = info.delegate;
+              const delegatedAmount = info.delegatedAmount;
+              const isNative = info.isNative;
+              
+              if (isNative) {
+                return null;
+              }
+              
+              if (state && state !== 'initialized') {
+                return null;
+              }
+              
+              if (delegate && delegatedAmount && Number(delegatedAmount) > 0) {
+                return null;
+              }
+              
+              if (closeAuthority && closeAuthority !== owner) {
+                return null;
+              }
+              
+              if (owner !== publicKey) {
+                return null;
+              }
+              
               return {
                 mint,
                 accountPubkey: pubkey,
                 uiAmount,
                 owner,
                 programId: item.programId,
+                state,
+                closeAuthority,
+                delegate,
+                delegatedAmount
               };
             } else {
-              return null
-            };
+              return null;
+            }
           } catch (innerErr) {
             console.warn("malformed token account item", innerErr, item);
             return null;

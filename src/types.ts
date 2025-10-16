@@ -8,4 +8,8 @@ export interface TokenData {
   symbol?: string;
   name?: string;
   priceUSD?: number;
+  state?: string;
+  closeAuthority?: string;
+  delegate?: string;
+  delegatedAmount?: string | number;
 }
