@@ -33,14 +33,14 @@ export function Statistics({
 
   const [tokens, setTokens] = useState<TokenData[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
-  
+
   const [solBalance, setSolBalance] = useState<number | null>(null);
   const [hosicoPrice, setHosicoPrice] = useState<number>(0);
-  
+
   const [isTransacting, setIsTransacting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [transactionStatus, setTransactionStatus] = useState<string>('');
 
   const handleTokenSelect = (tokenMint: string) => {
@@ -88,61 +88,9 @@ export function Statistics({
 
   const previewData = calculateHosicoPreview();
 
-  const getJupiterSwapTransaction = async (inputMint: string, amount: number, slippageBps: number = 300) => {
-    try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosico.mint}&amount=${Math.floor(amount * Math.pow(10, 6))}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
-
-      const response = await fetch(quoteUrl);
-
-      console.log("Jupiter quote response status:", response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Quote API error response:", errorText);
-        throw new Error(`Quote API error: ${response.status} - ${errorText}`);
-      }
-
-      const quoteResponse = await response.json();
-      console.log("Quote response:", quoteResponse);
-
-      const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          quoteResponse,
-          userPublicKey: publicKey,
-          dynamicComputeUnitLimit: true,
-          dynamicSlippage: true,
-          prioritizationFeeLamports: {
-            priorityLevelWithMaxLamports: {
-              maxLamports: 1000000,
-              priorityLevel: "veryHigh"
-            }
-          }
-        })
-      });
-
-      if (!swapResponse.ok) {
-        const errorText = await swapResponse.text();
-        console.error("Swap API error response:", errorText);
-        throw new Error(`Swap API error: ${swapResponse.status} - ${errorText}`);
-      }
-
-      const swapData = await swapResponse.json();
-      console.log("Swap response:", swapData);
-
-      return swapData.swapTransaction;
-    } catch (error) {
-      console.error('Jupiter swap error:', error);
-      throw error;
-    }
-  };
-
   const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosico.mint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.tokens.hosico.mint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
 
       const response = await fetch(quoteUrl);
 
@@ -199,20 +147,16 @@ export function Statistics({
     programId: string
   ) => {
     try {
-      // Create the close account instruction manually to ensure proper program ID handling
-      // This is necessary because gill's getCloseAccountInstruction might not handle Token-2022 properly
-      
+
       const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
       const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-      
-      // Ensure we're using the correct program ID
+
       const isToken2022 = programId === TOKEN_2022_PROGRAM_ID;
-      
+
       console.log(`Creating close instruction for ${isToken2022 ? 'Token-2022' : 'Token'} account: ${tokenAccountPubkey}`);
-      
-      // CloseAccount instruction data: just the instruction discriminator (9 for CloseAccount)
+
       const instructionData = new Uint8Array([9]);
-      
+
       const closeInstruction = {
         programAddress: address(programId),
         accounts: [
@@ -231,7 +175,7 @@ export function Statistics({
         ],
         data: instructionData
       };
-      
+
       return closeInstruction;
     } catch (error) {
       console.error('Error creating close account instruction:', error);
@@ -300,20 +244,17 @@ export function Statistics({
 
       setTransactionStatus(`Creating close instructions for ${selectedTokensList.length} tokens...`);
 
-      // Create all close account instructions
       const closeInstructions = [];
       let totalSolToRecover = 0;
 
       for (const token of selectedTokensList) {
         try {
-          // Validate that we own this token account
           if (token.owner !== publicKey) {
             console.warn(`Cannot close ${token.symbol} account: owned by ${token.owner}, but wallet is ${publicKey}`);
             setTransactionStatus(`⚠️ Cannot close ${token.symbol} account: not owned by this wallet`);
             continue;
           }
 
-          // Create close instruction for this token
           const closeInstruction = createCloseAccountInstruction(
             token.accountPubkey,
             publicKey,
@@ -340,116 +281,105 @@ export function Statistics({
       setTransactionStatus(`Creating swap instruction for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO...`);
 
       let allInstructions: any[] = [...closeInstructions];
-      console.log("totalSolToRecover", totalSolToRecover)
-      // Add SOL to HOSICO swap instruction if amount is significant
-      if (totalSolToRecover > 0.001) {
-        try {
-          const swapInstructionsData = await getJupiterSwapInstructions(
-            'So11111111111111111111111111111111111111112', // SOL mint
-            totalSolToRecover
-          );
-          console.log(swapInstructionsData)
-          // Parse and add swap instructions
-          if (swapInstructionsData.setupInstructions) {
-            // Add setup instructions first
-            for (const setupInstruction of swapInstructionsData.setupInstructions) {
-              const parsedInstruction = {
-                programAddress: address(setupInstruction.programId),
-                accounts: setupInstruction.accounts.map((acc: any) => ({
-                  address: address(acc.pubkey),
-                  role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
-                    acc.isSigner ? AccountRole.READONLY_SIGNER :
-                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
-                })),
-                data: new Uint8Array(Buffer.from(setupInstruction.data, 'base64'))
-              };
-              allInstructions.push(parsedInstruction);
-            }
-          }
 
-          // Add main swap instruction
-          if (swapInstructionsData.swapInstruction) {
-            const swapInstruction = swapInstructionsData.swapInstruction;
-            const parsedSwapInstruction = {
-              programAddress: address(swapInstruction.programId),
-              accounts: swapInstruction.accounts.map((acc: any) => ({
+      try {
+        const swapInstructionsData = await getJupiterSwapInstructions(
+          config.tokens.sol.mint,
+          totalSolToRecover
+        );
+
+        if (swapInstructionsData.setupInstructions) {
+          for (const setupInstruction of swapInstructionsData.setupInstructions) {
+            const parsedInstruction = {
+              programAddress: address(setupInstruction.programId),
+              accounts: setupInstruction.accounts.map((acc: any) => ({
                 address: address(acc.pubkey),
                 role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
                   acc.isSigner ? AccountRole.READONLY_SIGNER :
                     acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
               })),
-              data: new Uint8Array(Buffer.from(swapInstruction.data, 'base64'))
+              data: new Uint8Array(Buffer.from(setupInstruction.data, 'base64'))
             };
-            allInstructions.push(parsedSwapInstruction);
+            allInstructions.push(parsedInstruction);
           }
-
-          // Add cleanup instructions if any
-          if (swapInstructionsData.cleanupInstructions) {
-            for (const cleanupInstruction of swapInstructionsData.cleanupInstructions) {
-              const parsedInstruction = {
-                programAddress: address(cleanupInstruction.programId),
-                accounts: cleanupInstruction.accounts.map((acc: any) => ({
-                  address: address(acc.pubkey),
-                  role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
-                    acc.isSigner ? AccountRole.READONLY_SIGNER :
-                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
-                })),
-                data: new Uint8Array(Buffer.from(cleanupInstruction.data, 'base64'))
-              };
-              allInstructions.push(parsedInstruction);
-            }
-          }
-
-          // First, determine which token program HOSICO uses
-          const hosicoMintInfo = await client.rpc.getAccountInfo(address(config.hosico.mint)).send();
-          if (!hosicoMintInfo?.value) {
-            throw new Error('HOSICO mint account not found');
-          }
-          
-          const hosicoTokenProgramId = hosicoMintInfo.value.owner;
-          console.log(`HOSICO token program: ${hosicoTokenProgramId}`);
-
-          const sourceAta = await getAssociatedTokenAccountAddress(
-            address(config.hosico.mint), 
-            address(publicKey), 
-            address(hosicoTokenProgramId)
-          );
-          const destinationAta = await getAssociatedTokenAccountAddress(
-            address(config.hosico.mint), 
-            address('D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB'), 
-            address(hosicoTokenProgramId)
-          );
-
-          const transferInstruction = getTransferCheckedInstruction(
-            {
-              source: sourceAta,
-              destination: destinationAta,
-              mint: address(config.hosico.mint),
-              authority: address(publicKey),
-              decimals: 6,
-              amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * 0.007) * 1_000_000,
-            },
-            {
-              programAddress: address(hosicoTokenProgramId)
-            }
-          )
-
-          allInstructions.push(transferInstruction);
-
-          console.log(`Added Jupiter swap instructions for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO`);
-
-        } catch (swapError) {
-          console.warn('Failed to create swap instruction, proceeding with close-only transaction:', swapError);
-          setTransactionStatus(`⚠️ Could not create swap instruction, proceeding to close accounts only...`);
         }
+
+        if (swapInstructionsData.swapInstruction) {
+          const swapInstruction = swapInstructionsData.swapInstruction;
+          const parsedSwapInstruction = {
+            programAddress: address(swapInstruction.programId),
+            accounts: swapInstruction.accounts.map((acc: any) => ({
+              address: address(acc.pubkey),
+              role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
+                acc.isSigner ? AccountRole.READONLY_SIGNER :
+                  acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+            })),
+            data: new Uint8Array(Buffer.from(swapInstruction.data, 'base64'))
+          };
+          allInstructions.push(parsedSwapInstruction);
+        }
+
+        if (swapInstructionsData.cleanupInstructions) {
+          for (const cleanupInstruction of swapInstructionsData.cleanupInstructions) {
+            const parsedInstruction = {
+              programAddress: address(cleanupInstruction.programId),
+              accounts: cleanupInstruction.accounts.map((acc: any) => ({
+                address: address(acc.pubkey),
+                role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
+                  acc.isSigner ? AccountRole.READONLY_SIGNER :
+                    acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+              })),
+              data: new Uint8Array(Buffer.from(cleanupInstruction.data, 'base64'))
+            };
+            allInstructions.push(parsedInstruction);
+          }
+        }
+
+        const hosicoMintInfo = await client.rpc.getAccountInfo(address(config.tokens.hosico.mint)).send();
+        if (!hosicoMintInfo?.value) {
+          throw new Error('HOSICO mint account not found');
+        }
+
+        const hosicoTokenProgramId = hosicoMintInfo.value.owner;
+        console.log(`HOSICO token program: ${hosicoTokenProgramId}`);
+
+        const sourceAta = await getAssociatedTokenAccountAddress(
+          address(config.tokens.hosico.mint),
+          address(publicKey),
+          address(hosicoTokenProgramId)
+        );
+        const destinationAta = await getAssociatedTokenAccountAddress(
+          address(config.tokens.hosico.mint),
+          address('D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB'),
+          address(hosicoTokenProgramId)
+        );
+
+        const transferInstruction = getTransferCheckedInstruction(
+          {
+            source: sourceAta,
+            destination: destinationAta,
+            mint: address(config.tokens.hosico.mint),
+            authority: address(publicKey),
+            decimals: 6,
+            amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * 0.007) * 1_000_000,
+          },
+          {
+            programAddress: address(hosicoTokenProgramId)
+          }
+        )
+
+        allInstructions.push(transferInstruction);
+
+      } catch (swapError) {
+        console.warn('Failed to create swap instruction, proceeding with close-only transaction:', swapError);
+        setTransactionStatus(`⚠️ Could not create swap instruction, proceeding to close accounts only...`);
       }
+
 
       setTransactionStatus(`Executing batch transaction: ${closeInstructions.length} close + swap instructions...`);
 
-      // Get the latest blockhash for the transaction
       const { value: latestBlockhash } = await client.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
 
-      // Create single transaction with all instructions (close + swap)
       const batchTransaction = createTransaction({
         feePayer: address(publicKey),
         version: 0,
@@ -457,11 +387,9 @@ export function Statistics({
         instructions: allInstructions,
       });
 
-      // Compile and serialize the transaction
       const compiledTransaction = compileTransaction(batchTransaction);
       const serializedTransaction = getBase64EncodedWireTransaction(compiledTransaction);
 
-      // Execute the batch transaction
       const batchSignature = await executeTransaction(
         serializedTransaction,
         `Close ${closeInstructions.length} accounts & swap to $HOSICO`
@@ -475,7 +403,6 @@ export function Statistics({
         setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts! Recovered ~${totalSolToRecover.toFixed(3)} SOL`);
       }
 
-      // Clear selection after successful batch transaction
       setSelectedTokens(new Set());
 
     } catch (error) {
@@ -498,7 +425,7 @@ export function Statistics({
         let price = 0;
 
         try {
-          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.hosico.mint}`, {
+          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.hosico.mint}`, {
             headers: {
               'Accept': 'application/json',
               'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
@@ -507,7 +434,7 @@ export function Statistics({
 
           if (v3Response.ok) {
             const v3Data = await v3Response.json();
-            const tokenData = v3Data[config.hosico.mint];
+            const tokenData = v3Data[config.tokens.hosico.mint];
             if (tokenData && typeof tokenData.usdPrice === 'number') {
               price = tokenData.usdPrice;
               console.log("HOSICO price from Jupiter v3:", price);
@@ -523,7 +450,7 @@ export function Statistics({
         }
 
         try {
-          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.hosico.mint}&vs_currencies=usd`, {
+          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.tokens.hosico.mint}&vs_currencies=usd`, {
             headers: {
               'Accept': 'application/json',
             }
@@ -531,7 +458,7 @@ export function Statistics({
 
           if (cgResponse.ok) {
             const cgData = await cgResponse.json();
-            price = cgData[config.hosico.mint]?.usd || 0;
+            price = cgData[config.tokens.hosico.mint]?.usd || 0;
             if (price > 0) {
               console.log("HOSICO price from CoinGecko:", price);
               setHosicoPrice(price);
@@ -543,7 +470,7 @@ export function Statistics({
         }
 
         try {
-          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.hosico.mint}`, {
+          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.hosico.mint}`, {
             headers: {
               'Accept': 'application/json',
               'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
@@ -553,7 +480,7 @@ export function Statistics({
 
           if (v2Response.ok) {
             const v2Data = await v2Response.json();
-            price = v2Data.data?.[config.hosico.mint]?.price || 0;
+            price = v2Data.data?.[config.tokens.hosico.mint]?.price || 0;
             if (price > 0) {
               console.log("HOSICO price from Jupiter v2:", price);
               setHosicoPrice(price);
@@ -565,7 +492,7 @@ export function Statistics({
         }
 
         try {
-          const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.hosico.mint}&amount=1000000000&slippageBps=50`);
+          const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.tokens.hosico.mint}&amount=1000000000&slippageBps=50`);
 
           if (quoteResponse.ok) {
             const quoteData = await quoteResponse.json();
@@ -598,7 +525,7 @@ export function Statistics({
     fetchHosicoPrice();
     const interval = setInterval(fetchHosicoPrice, 60000);
     return () => clearInterval(interval);
-  }, [config.hosico.mint]);
+  }, [config.tokens.hosico.mint]);
 
   useEffect(() => {
     let mounted = true;
@@ -638,16 +565,11 @@ export function Statistics({
         const standardTokenProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         const token2022ProgramId = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
-        // Fetch token accounts from both programs
         const [standardTokensResp, token2022Resp] = await Promise.all([
           client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send(),
           client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send()
         ]);
 
-        console.log("Standard token accounts response:", standardTokensResp);
-        console.log("Token-2022 accounts response:", token2022Resp);
-
-        // Combine accounts from both programs
         const allTokenAccounts = [
           ...((standardTokensResp as any)?.value ?? []).map((item: any) => ({ ...item, programId: standardTokenProgramId })),
           ...((token2022Resp as any)?.value ?? []).map((item: any) => ({ ...item, programId: token2022ProgramId }))
@@ -656,18 +578,17 @@ export function Statistics({
         const accounts: TokenData[] = allTokenAccounts.map((item: any): TokenData | null => {
           try {
             if (item?.account?.data?.parsed?.info?.tokenAmount?.decimals === 0) return null;
-            if (item?.account?.data?.parsed?.info?.mint === config.hosico.mint) return null;
+            if (item?.account?.data?.parsed?.info?.mint === config.tokens.hosico.mint) return null;
+            if (item?.account?.data?.parsed?.info?.mint === config.tokens.sol.mint) return null;
 
             if (item?.account?.data?.parsed?.info?.tokenAmount?.uiAmount === 0) {
               const pubkey = item.pubkey;
               const parsed = item.account?.data?.parsed ?? {};
               const info = parsed.info ?? {};
               const mint = info.mint;
-              const owner = info.owner; // Extract the actual owner/authority
+              const owner = info.owner;
               const tokenAmount = info.tokenAmount ?? {};
               const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
-
-              console.log(`Token account ${pubkey}: mint=${mint}, owner=${owner}, uiAmount=${uiAmount}, program=${item.programId}`);
 
               return {
                 mint,
@@ -685,9 +606,8 @@ export function Statistics({
           }
         }).filter(Boolean) as TokenData[];
 
-        console.log(`Found ${accounts.length} token accounts total`);
-
         let sol = null;
+
         try {
           const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "confirmed" });
           const balResp = await balRespPromise.send();
@@ -698,8 +618,6 @@ export function Statistics({
         } catch (balErr) {
           console.warn("failed to fetch SOL balance", balErr);
         }
-
-
 
         const allTokenMints = accounts.map(t => t.mint);
         const priceMap = await fetchTokenPrices(allTokenMints);
@@ -868,7 +786,7 @@ export function Statistics({
 
           {selectedTokens.size > 0 && (
             <div className="process-info">
-              💡 Process: Close accounts → Recover SOL rent → Swap tokens to $HOSICO
+              💡 Process: Close accounts → Recover SOL rent → Swap SOL to $HOSICO
             </div>
           )}
         </div>

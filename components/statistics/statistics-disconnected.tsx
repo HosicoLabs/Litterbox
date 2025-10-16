@@ -88,14 +88,9 @@ export function StatisticsDisconnected() {
             <p>
               Connect your Solana wallet to view your token portfolio and start converting your dust tokens to $HOSICO.
             </p>
-            <button
-              className="btn connect-btn"
-              onClick={() => {
-                console.log('Connect wallet clicked');
-              }}
-            >
+            <div className="btn connect-btn">
               <WalletDropdown />
-            </button>
+            </div>
           </div>
         </div>
 
@@ -112,7 +107,7 @@ export function StatisticsDisconnected() {
           </div>
 
           <div className="process-info">
-            💡 Process: Close accounts → Recover SOL rent → Swap tokens to $HOSICO
+            💡 Process: Close accounts → Recover SOL rent → Swap SOL to $HOSICO
           </div>
         </div>
 
