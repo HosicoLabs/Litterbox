@@ -46,12 +46,11 @@ export function Statistics({
   const [transactionStatus, setTransactionStatus] = useState<string>('');
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const ITEMS_PER_PAGE = 8;
-
+  
   const paginationData = useMemo(() => {
-    const totalPages = Math.ceil(rawAccounts.length / ITEMS_PER_PAGE);
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const totalPages = Math.ceil(rawAccounts.length / config.itemsPerPage);
+    const startIndex = (currentPage - 1) * config.itemsPerPage;
+    const endIndex = startIndex + config.itemsPerPage;
     const currentPageAccounts = rawAccounts.slice(startIndex, endIndex);
     
     return {
@@ -60,7 +59,7 @@ export function Statistics({
       endIndex,
       currentPageAccounts
     };
-  }, [rawAccounts, currentPage, ITEMS_PER_PAGE]);
+  }, [rawAccounts, currentPage, config.itemsPerPage]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -92,7 +91,7 @@ export function Statistics({
       return sum + tokenValueUSD;
     }, 0);
 
-    const estimatedSolRecovery = selectedTokensList.length * 0.002;
+    const estimatedSolRecovery = selectedTokensList.length * config.tokenAccountRentExemption;
     const solPriceUSD = 200;
     const solRecoveryValueUSD = estimatedSolRecovery * solPriceUSD;
 
@@ -888,8 +887,7 @@ export function Statistics({
           })}
         </div>
 
-        {/* Pagination Controls */}
-        {rawAccounts.length > ITEMS_PER_PAGE && (
+        {rawAccounts.length > config.itemsPerPage && (
           <div className="pagination-controls">
             <div className="pagination-info">
               Showing {paginationData.startIndex + 1}-{Math.min(paginationData.endIndex, rawAccounts.length)} of {rawAccounts.length} tokens
