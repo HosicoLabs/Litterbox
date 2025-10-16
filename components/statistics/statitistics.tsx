@@ -14,7 +14,7 @@ import { UiWalletAccount, useSignAndSendTransaction, useWalletUiSigner } from "@
 import { TokenData } from "@/types";
 import { config } from "@/config";
 import { fetchTokenPrices } from "@/lib/utils";
-import { getCloseAccountInstruction } from "gill/programs";
+import { getAssociatedTokenAccountAddress, getCloseAccountInstruction, getTransferCheckedInstruction, getTransferInstruction } from "gill/programs";
 
 export function Statistics({
   account,
@@ -199,13 +199,39 @@ export function Statistics({
     programId: string
   ) => {
     try {
-      const closeInstruction = getCloseAccountInstruction({
-        account: address(tokenAccountPubkey),
-        destination: address(destination),
-        owner: address(authority)
-      }, {
-        programAddress: address(programId)
-      });
+      // Create the close account instruction manually to ensure proper program ID handling
+      // This is necessary because gill's getCloseAccountInstruction might not handle Token-2022 properly
+      
+      const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+      const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+      
+      // Ensure we're using the correct program ID
+      const isToken2022 = programId === TOKEN_2022_PROGRAM_ID;
+      
+      console.log(`Creating close instruction for ${isToken2022 ? 'Token-2022' : 'Token'} account: ${tokenAccountPubkey}`);
+      
+      // CloseAccount instruction data: just the instruction discriminator (9 for CloseAccount)
+      const instructionData = new Uint8Array([9]);
+      
+      const closeInstruction = {
+        programAddress: address(programId),
+        accounts: [
+          {
+            address: address(tokenAccountPubkey),
+            role: AccountRole.WRITABLE
+          },
+          {
+            address: address(destination),
+            role: AccountRole.WRITABLE
+          },
+          {
+            address: address(authority),
+            role: AccountRole.READONLY_SIGNER
+          }
+        ],
+        data: instructionData
+      };
+      
       return closeInstruction;
     } catch (error) {
       console.error('Error creating close account instruction:', error);
@@ -313,7 +339,7 @@ export function Statistics({
 
       setTransactionStatus(`Creating swap instruction for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO...`);
 
-      let allInstructions = [...closeInstructions];
+      let allInstructions: any[] = [...closeInstructions];
       console.log("totalSolToRecover", totalSolToRecover)
       // Add SOL to HOSICO swap instruction if amount is significant
       if (totalSolToRecover > 0.001) {
@@ -322,7 +348,7 @@ export function Statistics({
             'So11111111111111111111111111111111111111112', // SOL mint
             totalSolToRecover
           );
-
+          console.log(swapInstructionsData)
           // Parse and add swap instructions
           if (swapInstructionsData.setupInstructions) {
             // Add setup instructions first
@@ -332,8 +358,8 @@ export function Statistics({
                 accounts: setupInstruction.accounts.map((acc: any) => ({
                   address: address(acc.pubkey),
                   role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
-                        acc.isSigner ? AccountRole.READONLY_SIGNER :
-                        acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+                    acc.isSigner ? AccountRole.READONLY_SIGNER :
+                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
                 })),
                 data: new Uint8Array(Buffer.from(setupInstruction.data, 'base64'))
               };
@@ -349,8 +375,8 @@ export function Statistics({
               accounts: swapInstruction.accounts.map((acc: any) => ({
                 address: address(acc.pubkey),
                 role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
-                      acc.isSigner ? AccountRole.READONLY_SIGNER :
-                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+                  acc.isSigner ? AccountRole.READONLY_SIGNER :
+                    acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
               })),
               data: new Uint8Array(Buffer.from(swapInstruction.data, 'base64'))
             };
@@ -365,14 +391,50 @@ export function Statistics({
                 accounts: cleanupInstruction.accounts.map((acc: any) => ({
                   address: address(acc.pubkey),
                   role: acc.isSigner && acc.isWritable ? AccountRole.WRITABLE_SIGNER :
-                        acc.isSigner ? AccountRole.READONLY_SIGNER :
-                        acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+                    acc.isSigner ? AccountRole.READONLY_SIGNER :
+                      acc.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
                 })),
                 data: new Uint8Array(Buffer.from(cleanupInstruction.data, 'base64'))
               };
               allInstructions.push(parsedInstruction);
             }
           }
+
+          // First, determine which token program HOSICO uses
+          const hosicoMintInfo = await client.rpc.getAccountInfo(address(config.hosicoMint)).send();
+          if (!hosicoMintInfo?.value) {
+            throw new Error('HOSICO mint account not found');
+          }
+          
+          const hosicoTokenProgramId = hosicoMintInfo.value.owner;
+          console.log(`HOSICO token program: ${hosicoTokenProgramId}`);
+
+          const sourceAta = await getAssociatedTokenAccountAddress(
+            address(config.hosicoMint), 
+            address(publicKey), 
+            address(hosicoTokenProgramId)
+          );
+          const destinationAta = await getAssociatedTokenAccountAddress(
+            address(config.hosicoMint), 
+            address('D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB'), 
+            address(hosicoTokenProgramId)
+          );
+
+          const transferInstruction = getTransferCheckedInstruction(
+            {
+              source: sourceAta,
+              destination: destinationAta,
+              mint: address(config.hosicoMint),
+              authority: address(publicKey),
+              decimals: 6,
+              amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * 0.007) * 1_000_000,
+            },
+            {
+              programAddress: address(hosicoTokenProgramId)
+            }
+          )
+
+          allInstructions.push(transferInstruction);
 
           console.log(`Added Jupiter swap instructions for ${totalSolToRecover.toFixed(3)} SOL to $HOSICO`);
 
@@ -401,7 +463,7 @@ export function Statistics({
 
       // Execute the batch transaction
       const batchSignature = await executeTransaction(
-        serializedTransaction, 
+        serializedTransaction,
         `Close ${closeInstructions.length} accounts & swap to $HOSICO`
       );
 
