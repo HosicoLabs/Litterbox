@@ -7,7 +7,8 @@ import {
   SolanaClient,
   compileTransaction,
   getBase64EncodedWireTransaction,
-  AccountRole
+  AccountRole,
+  LAMPORTS_PER_SOL
 } from "gill";
 import { TokenListProvider, ENV as TokenListEnv } from "@solana/spl-token-registry";
 import { UiWalletAccount, useSignAndSendTransaction } from "@wallet-ui/react";
@@ -37,6 +38,7 @@ export function Statistics({
 
   const [solBalance, setSolBalance] = useState<number | null>(null);
   const [hosicoPrice, setHosicoPrice] = useState<number>(0);
+  const [solPrice, setSolPrice] = useState<number>(200); // fallback to 200
 
   const [isTransacting, setIsTransacting] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -46,13 +48,13 @@ export function Statistics({
   const [transactionStatus, setTransactionStatus] = useState<string>('');
 
   const [currentPage, setCurrentPage] = useState<number>(1);
-  
+
   const paginationData = useMemo(() => {
     const totalPages = Math.ceil(rawAccounts.length / config.itemsPerPage);
     const startIndex = (currentPage - 1) * config.itemsPerPage;
     const endIndex = startIndex + config.itemsPerPage;
     const currentPageAccounts = rawAccounts.slice(startIndex, endIndex);
-    
+
     return {
       totalPages,
       startIndex,
@@ -92,8 +94,7 @@ export function Statistics({
     }, 0);
 
     const estimatedSolRecovery = selectedTokensList.length * config.tokenAccountRentExemption;
-    const solPriceUSD = 200;
-    const solRecoveryValueUSD = estimatedSolRecovery * solPriceUSD;
+    const solRecoveryValueUSD = estimatedSolRecovery * solPrice;
 
     const totalValueUSD = totalTokenValueUSD + solRecoveryValueUSD;
 
@@ -106,15 +107,13 @@ export function Statistics({
       solRecoveryValueUSD,
       selectedCount: selectedTokensList.length
     };
-  }, [rawAccounts, selectedTokens, hosicoPrice]);
+  }, [rawAccounts, selectedTokens, hosicoPrice, solPrice]);
 
   const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.tokens.hosico.mint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.tokens.hosico.mint}&amount=${Number(amount.toFixed(3)) * LAMPORTS_PER_SOL}&slippageBps=${slippageBps}&restrictIntermediateTokens=true&maxAccounts=40`;
 
       const response = await fetch(quoteUrl);
-
-      console.log("Jupiter quote response status:", response.status)
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -123,7 +122,6 @@ export function Statistics({
       }
 
       const quoteResponse = await response.json();
-      console.log("Quote response:", quoteResponse);
 
       const swapResponse = await fetch('https://lite-api.jup.ag/swap/v1/swap-instructions', {
         method: 'POST',
@@ -151,7 +149,6 @@ export function Statistics({
       }
 
       const swapData = await swapResponse.json();
-      console.log("Swap instructions response:", swapData);
 
       return swapData;
     } catch (error) {
@@ -172,8 +169,6 @@ export function Statistics({
       const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
       const isToken2022 = programId === TOKEN_2022_PROGRAM_ID;
-
-      console.log(`Creating close instruction for ${isToken2022 ? 'Token-2022' : 'Token'} account: ${tokenAccountPubkey}`);
 
       const instructionData = new Uint8Array([9]);
 
@@ -208,8 +203,6 @@ export function Statistics({
       if (!signAndSendTransaction) {
         throw new Error('Transaction signing not available - wallet not properly connected');
       }
-
-      console.log(`Executing transaction: ${description}`);
 
       let transactionBytes: Uint8Array;
 
@@ -361,7 +354,6 @@ export function Statistics({
         }
 
         const hosicoTokenProgramId = hosicoMintInfo.value.owner;
-        console.log(`HOSICO token program: ${hosicoTokenProgramId}`);
 
         const sourceAta = await getAssociatedTokenAccountAddress(
           address(config.tokens.hosico.mint),
@@ -370,7 +362,7 @@ export function Statistics({
         );
         const destinationAta = await getAssociatedTokenAccountAddress(
           address(config.tokens.hosico.mint),
-          address('D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB'),
+          address(config.tipWallet),
           address(hosicoTokenProgramId)
         );
 
@@ -381,7 +373,7 @@ export function Statistics({
             mint: address(config.tokens.hosico.mint),
             authority: address(publicKey),
             decimals: 6,
-            amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * 0.007) * 1_000_000,
+            amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * config.txTip) * config.tokens.hosico.decimals,
           },
           {
             programAddress: address(hosicoTokenProgramId)
@@ -415,8 +407,6 @@ export function Statistics({
         `Close ${closeInstructions.length} accounts & swap to $HOSICO`
       );
 
-      console.log(`Batch transaction completed: ${batchSignature}`);
-
       if (totalSolToRecover > 0.001) {
         setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts and swapped ${totalSolToRecover.toFixed(3)} SOL to $HOSICO!`);
       } else {
@@ -438,6 +428,74 @@ export function Statistics({
   };
 
   useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        let price = 200; // fallback
+
+        try {
+          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`);
+
+          if (v3Response.ok) {
+            const v3Data = await v3Response.json();
+            const solData = v3Data['So11111111111111111111111111111111111111112'];
+            if (solData && typeof solData.usdPrice === 'number') {
+              price = solData.usdPrice;
+              console.log("SOL price from Jupiter v3:", price);
+              setSolPrice(price);
+              return;
+            }
+          }
+        } catch (v3Error) {
+          console.warn('Jupiter v3 failed for SOL price:', v3Error);
+        }
+
+        try {
+          const cgResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+
+          if (cgResponse.ok) {
+            const cgData = await cgResponse.json();
+            price = cgData.solana?.usd || 200;
+            if (price > 0) {
+              console.log("SOL price from CoinGecko:", price);
+              setSolPrice(price);
+              return;
+            }
+          }
+        } catch (cgError) {
+          console.warn('CoinGecko failed for SOL price:', cgError);
+        }
+
+        try {
+          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112`);
+
+          if (v2Response.ok) {
+            const v2Data = await v2Response.json();
+            price = v2Data.data?.['So11111111111111111111111111111111111111112']?.price || 200;
+            if (price > 0) {
+              console.log("SOL price from Jupiter v2:", price);
+              setSolPrice(price);
+              return;
+            }
+          }
+        } catch (v2Error) {
+          console.warn('Jupiter v2 failed for SOL price:', v2Error);
+        }
+
+        console.log('Using fallback SOL price:', price);
+        setSolPrice(price);
+
+      } catch (error) {
+        console.warn('Failed to fetch SOL price, using fallback:', error);
+        setSolPrice(200);
+      }
+    };
+
+    fetchSolPrice();
+    const interval = setInterval(fetchSolPrice, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     const fetchHosicoPrice = async () => {
       console.log('Fetching HOSICO price...');
 
@@ -445,20 +503,13 @@ export function Statistics({
         let price = 0;
 
         try {
-          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.hosico.mint}`, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
-            }
-          });
+          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.hosico.mint}`);
 
           if (v3Response.ok) {
             const v3Data = await v3Response.json();
             const tokenData = v3Data[config.tokens.hosico.mint];
             if (tokenData && typeof tokenData.usdPrice === 'number') {
               price = tokenData.usdPrice;
-              console.log("HOSICO price from Jupiter v3:", price);
-              console.log("Additional data - decimals:", tokenData.decimals, "24h change:", tokenData.priceChange24h);
               setHosicoPrice(price);
               return;
             }
@@ -470,17 +521,12 @@ export function Statistics({
         }
 
         try {
-          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.tokens.hosico.mint}&vs_currencies=usd`, {
-            headers: {
-              'Accept': 'application/json',
-            }
-          });
+          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.tokens.hosico.mint}&vs_currencies=usd`);
 
           if (cgResponse.ok) {
             const cgData = await cgResponse.json();
             price = cgData[config.tokens.hosico.mint]?.usd || 0;
             if (price > 0) {
-              console.log("HOSICO price from CoinGecko:", price);
               setHosicoPrice(price);
               return;
             }
@@ -490,13 +536,7 @@ export function Statistics({
         }
 
         try {
-          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.hosico.mint}`, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
-              'Origin': 'https://jup.ag',
-            }
-          });
+          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.hosico.mint}`);
 
           if (v2Response.ok) {
             const v2Data = await v2Response.json();
@@ -519,8 +559,7 @@ export function Statistics({
             if (quoteData.outAmount) {
               const solAmount = 1;
               const hosicoAmount = parseInt(quoteData.outAmount) / Math.pow(10, 6);
-              const solPriceUSD = 200;
-              const impliedPrice = (solAmount * solPriceUSD) / hosicoAmount;
+              const impliedPrice = (solAmount * solPrice) / hosicoAmount;
 
               if (impliedPrice > 0 && impliedPrice < 1000) {
                 console.log("HOSICO price derived from Jupiter quote:", impliedPrice);
@@ -545,29 +584,7 @@ export function Statistics({
     fetchHosicoPrice();
     const interval = setInterval(fetchHosicoPrice, 60000);
     return () => clearInterval(interval);
-  }, [config.tokens.hosico.mint]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const container = await new TokenListProvider().resolve();
-        const list = container.filterByChainId(TokenListEnv.MainnetBeta).getList();
-        if (!mounted) return;
-        const map = new Map();
-        list.forEach((meta) => map.set(meta.address, meta));
-        setTokenMap(map);
-      } catch (err) {
-        console.warn("token list load failed", err);
-        setTokenMap(new Map());
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const [tokenMap, setTokenMap] = useState(new Map());
+  }, [config.tokens.hosico.mint, solPrice]);
 
   useEffect(() => {
     if (!publicKey) {
@@ -617,10 +634,10 @@ export function Statistics({
               const delegate = info.delegate;
               const delegatedAmount = info.delegatedAmount;
               const isNative = info.isNative;
-              
+
               const extensions = info.extensions;
               let hasWithheldFees = false;
-              
+
               if (extensions && Array.isArray(extensions)) {
                 for (const extension of extensions) {
                   if (extension.extension === 'transferFeeAmount') {
@@ -635,31 +652,31 @@ export function Statistics({
                   }
                 }
               }
-              
+
               if (hasWithheldFees) {
                 return null;
               }
-              
+
               if (isNative) {
                 return null;
               }
-              
+
               if (state && state !== 'initialized') {
                 return null;
               }
-              
+
               if (delegate && delegatedAmount && Number(delegatedAmount) > 0) {
                 return null;
               }
-              
+
               if (closeAuthority && closeAuthority !== owner) {
                 return null;
               }
-              
+
               if (owner !== publicKey) {
                 return null;
               }
-              
+
               return {
                 mint,
                 accountPubkey: pubkey,
@@ -688,7 +705,7 @@ export function Statistics({
           const balResp = await balRespPromise.send();
           const lamports = typeof balResp === "number" ? balResp : ((balResp as any)?.value ?? null);
           if (lamports != null) {
-            sol = Number(lamports) / 1_000_000_000;
+            sol = Number(lamports) / LAMPORTS_PER_SOL;
           }
         } catch (balErr) {
           console.warn("failed to fetch SOL balance", balErr);
@@ -729,7 +746,7 @@ export function Statistics({
 
   useEffect(() => {
     const { currentPageAccounts } = paginationData;
-    
+
     if (currentPageAccounts.length === 0) {
       setTokens([]);
       return;
@@ -901,7 +918,7 @@ export function Statistics({
               >
                 Previous
               </button>
-              
+
               {Array.from({ length: paginationData.totalPages }, (_, i) => i + 1).map(page => (
                 <button
                   key={page}
@@ -911,7 +928,7 @@ export function Statistics({
                   {page}
                 </button>
               ))}
-              
+
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationData.totalPages))}
                 disabled={currentPage === paginationData.totalPages}
@@ -950,7 +967,7 @@ export function Statistics({
             <p className="status">Total Value (USD)</p>
           </div>
           <div className="convertion">
-            <p className="amount">{previewData.hosicoAmount.toFixed(2)} $HOSICO</p>
+            <p className="amount">{Number(previewData.hosicoAmount.toFixed(2)) - (Number(previewData.hosicoAmount.toFixed(2)) * config.txTip)} $HOSICO</p>
             <p className="status">You will receive</p>
           </div>
           <div className="convertion">
@@ -981,6 +998,10 @@ export function Statistics({
             $HOSICO Price: ${hosicoPrice.toFixed(6)}
           </div>
         )}
+
+        <div className="price-info">
+          SOL Price: ${solPrice.toFixed(2)}
+        </div>
       </div>
     </div>
   );
