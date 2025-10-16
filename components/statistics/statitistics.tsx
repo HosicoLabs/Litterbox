@@ -28,18 +28,20 @@ export function Statistics({
 
   const signAndSendTransaction = useSignAndSendTransaction(
     account,
-    'solana:mainnet'
+    `solana:${config.clusterId}` as const
   )
 
-  const [loading, setLoading] = useState(false);
   const [tokens, setTokens] = useState<TokenData[]>([]);
-  const [solBalance, setSolBalance] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
+  
+  const [solBalance, setSolBalance] = useState<number | null>(null);
   const [hosicoPrice, setHosicoPrice] = useState<number>(0);
+  
   const [isTransacting, setIsTransacting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-
 
   const handleTokenSelect = (tokenMint: string) => {
     const newSelected = new Set(selectedTokens);
@@ -88,7 +90,7 @@ export function Statistics({
 
   const getJupiterSwapTransaction = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosicoMint}&amount=${Math.floor(amount * Math.pow(10, 6))}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosico.mint}&amount=${Math.floor(amount * Math.pow(10, 6))}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
 
       const response = await fetch(quoteUrl);
 
@@ -140,7 +142,7 @@ export function Statistics({
 
   const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosicoMint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.hosico.mint}&amount=${amount * 1_000_000_000}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`;
 
       const response = await fetch(quoteUrl);
 
@@ -399,7 +401,7 @@ export function Statistics({
           }
 
           // First, determine which token program HOSICO uses
-          const hosicoMintInfo = await client.rpc.getAccountInfo(address(config.hosicoMint)).send();
+          const hosicoMintInfo = await client.rpc.getAccountInfo(address(config.hosico.mint)).send();
           if (!hosicoMintInfo?.value) {
             throw new Error('HOSICO mint account not found');
           }
@@ -408,12 +410,12 @@ export function Statistics({
           console.log(`HOSICO token program: ${hosicoTokenProgramId}`);
 
           const sourceAta = await getAssociatedTokenAccountAddress(
-            address(config.hosicoMint), 
+            address(config.hosico.mint), 
             address(publicKey), 
             address(hosicoTokenProgramId)
           );
           const destinationAta = await getAssociatedTokenAccountAddress(
-            address(config.hosicoMint), 
+            address(config.hosico.mint), 
             address('D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB'), 
             address(hosicoTokenProgramId)
           );
@@ -422,7 +424,7 @@ export function Statistics({
             {
               source: sourceAta,
               destination: destinationAta,
-              mint: address(config.hosicoMint),
+              mint: address(config.hosico.mint),
               authority: address(publicKey),
               decimals: 6,
               amount: Number(Number(previewData.hosicoAmount.toFixed(0)) * 0.007) * 1_000_000,
@@ -496,7 +498,7 @@ export function Statistics({
         let price = 0;
 
         try {
-          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.hosicoMint}`, {
+          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.hosico.mint}`, {
             headers: {
               'Accept': 'application/json',
               'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
@@ -505,7 +507,7 @@ export function Statistics({
 
           if (v3Response.ok) {
             const v3Data = await v3Response.json();
-            const tokenData = v3Data[config.hosicoMint];
+            const tokenData = v3Data[config.hosico.mint];
             if (tokenData && typeof tokenData.usdPrice === 'number') {
               price = tokenData.usdPrice;
               console.log("HOSICO price from Jupiter v3:", price);
@@ -521,7 +523,7 @@ export function Statistics({
         }
 
         try {
-          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.hosicoMint}&vs_currencies=usd`, {
+          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.hosico.mint}&vs_currencies=usd`, {
             headers: {
               'Accept': 'application/json',
             }
@@ -529,7 +531,7 @@ export function Statistics({
 
           if (cgResponse.ok) {
             const cgData = await cgResponse.json();
-            price = cgData[config.hosicoMint]?.usd || 0;
+            price = cgData[config.hosico.mint]?.usd || 0;
             if (price > 0) {
               console.log("HOSICO price from CoinGecko:", price);
               setHosicoPrice(price);
@@ -541,7 +543,7 @@ export function Statistics({
         }
 
         try {
-          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.hosicoMint}`, {
+          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.hosico.mint}`, {
             headers: {
               'Accept': 'application/json',
               'User-Agent': 'Mozilla/5.0 (compatible; LitterboxApp/1.0)',
@@ -551,7 +553,7 @@ export function Statistics({
 
           if (v2Response.ok) {
             const v2Data = await v2Response.json();
-            price = v2Data.data?.[config.hosicoMint]?.price || 0;
+            price = v2Data.data?.[config.hosico.mint]?.price || 0;
             if (price > 0) {
               console.log("HOSICO price from Jupiter v2:", price);
               setHosicoPrice(price);
@@ -563,7 +565,7 @@ export function Statistics({
         }
 
         try {
-          const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.hosicoMint}&amount=1000000000&slippageBps=50`);
+          const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.hosico.mint}&amount=1000000000&slippageBps=50`);
 
           if (quoteResponse.ok) {
             const quoteData = await quoteResponse.json();
@@ -596,7 +598,7 @@ export function Statistics({
     fetchHosicoPrice();
     const interval = setInterval(fetchHosicoPrice, 60000);
     return () => clearInterval(interval);
-  }, [config.hosicoMint]);
+  }, [config.hosico.mint]);
 
   useEffect(() => {
     let mounted = true;
@@ -654,7 +656,7 @@ export function Statistics({
         const accounts: TokenData[] = allTokenAccounts.map((item: any): TokenData | null => {
           try {
             if (item?.account?.data?.parsed?.info?.tokenAmount?.decimals === 0) return null;
-            if (item?.account?.data?.parsed?.info?.mint === config.hosicoMint) return null;
+            if (item?.account?.data?.parsed?.info?.mint === config.hosico.mint) return null;
 
             if (item?.account?.data?.parsed?.info?.tokenAmount?.uiAmount === 0) {
               const pubkey = item.pubkey;
@@ -763,43 +765,14 @@ export function Statistics({
   return (
     <div id="statsistics" className="statistics">
       <div className="left">
-        <div className="table" style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          borderRadius: '8px',
-          height: "auto",
-          overflow: 'hidden'
-        }}>
+        <div className="table">
           <div className="grid grid-cols-3 gap-4">
-            <div className="thead_col h-max" style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 16px',
-              fontWeight: 'bold'
-            }}>
+            <div className="thead_col h-max">
               <button
                 onClick={handleSelectAll}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
+                className="select-all-btn"
               >
-                <div style={{
-                  width: '16px',
-                  height: '16px',
-                  border: '2px solid #FFBB00',
-                  borderRadius: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: selectedTokens.size === tokens.length && tokens.length > 0 ? '#FFBB00' : 'transparent'
-                }}>
+                <div className={`checkbox ${selectedTokens.size === tokens.length && tokens.length > 0 ? 'checked' : ''}`}>
                   {selectedTokens.size === tokens.length && tokens.length > 0 && (
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
                       <path d="M10 3L4.5 8.5L2 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -809,28 +782,17 @@ export function Statistics({
                 <span>Asset</span>
               </button>
             </div>
-            <div className="thead_col h-max text-left" style={{
-              padding: '12px 16px',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}>
+            <div className="thead_col h-max text-left">
               Balance
             </div>
-            <div className="thead_col h-max text-left" style={{
-              padding: '12px 16px',
-              fontWeight: 'bold',
-              textAlign: 'left'
-            }}>
+            <div className="thead_col h-max text-left">
               Price (USD)
             </div>
-
           </div>
-
-
 
           {loading && (
             <div className="grid grid-cols-1 gap-4">
-              <div style={{ padding: '16px', textAlign: 'center' }}>
+              <div className="loading-state">
                 Scanning wallet...
               </div>
             </div>
@@ -838,7 +800,7 @@ export function Statistics({
 
           {!loading && error && (
             <div className="grid grid-cols-1 gap-4">
-              <div style={{ padding: '16px', textAlign: 'center', color: 'red' }}>
+              <div className="error-state">
                 Error: {error}
               </div>
             </div>
@@ -846,7 +808,7 @@ export function Statistics({
 
           {!loading && !error && tokens.length === 0 && (
             <div className="grid grid-cols-1 gap-4">
-              <div style={{ padding: '16px', textAlign: 'center' }}>
+              <div className="empty-state">
                 No tokens found with value {'<'}$1.
               </div>
             </div>
@@ -857,35 +819,12 @@ export function Statistics({
 
             return (
               <div className="grid grid-cols-3 gap-4" key={`${tok.mint}-${tok.accountPubkey}`}>
-                <div
-                  className="h-max"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    padding: '12px 16px',
-                  }}
-                >
+                <div className="h-max token-row">
                   <button
                     onClick={() => handleTokenSelect(tok.mint)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      marginRight: '8px'
-                    }}
+                    className="token-select-btn"
                   >
-                    <div style={{
-                      width: '16px',
-                      height: '16px',
-                      border: '2px solid #FFBB00',
-                      borderRadius: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: isSelected ? '#FFBB00' : 'transparent'
-                    }}>
+                    <div className={`checkbox ${isSelected ? 'checked' : ''}`}>
                       {isSelected && (
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
                           <path d="M10 3L4.5 8.5L2 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -893,28 +832,18 @@ export function Statistics({
                       )}
                     </div>
                   </button>
-                  {tok.image ? <img src={tok.image} alt={tok.symbol} style={{ width: 32, height: 32, borderRadius: 4 }} /> : <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="rounded-full h-8 max-h-8 min-h-8 w-8 min-w-8 max-w-8"><g clipPath="url(#clip0_2849_7888)"><rect width="32" height="32" rx="16" fill="#030914"></rect><circle cx="16.0001" cy="16" r="13.3333" stroke="#9498A1" strokeWidth="1.5"></circle><path d="M13.3335 11.9999C13.3335 10.5272 14.5274 9.33325 16.0002 9.33325C17.4729 9.33325 18.6668 10.5272 18.6668 11.9999C18.6668 12.5308 18.5117 13.0254 18.2443 13.441C17.4474 14.6795 16.0002 15.8605 16.0002 17.3333L16.0002 17.9999" stroke="#9498A1" strokeWidth="1.5" strokeLinecap="round"></path><path d="M15.9895 22.6666H16.0015" stroke="#9498A1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></g><defs><clipPath id="clip0_2849_7888"><rect width="32" height="32" rx="16" fill="white"></rect></clipPath></defs></svg>}
+                  {tok.image ? <img src={tok.image} alt={tok.symbol} className="token-image" /> : <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="rounded-full h-8 max-h-8 min-h-8 w-8 min-w-8 max-w-8"><g clipPath="url(#clip0_2849_7888)"><rect width="32" height="32" rx="16" fill="#030914"></rect><circle cx="16.0001" cy="16" r="13.3333" stroke="#9498A1" strokeWidth="1.5"></circle><path d="M13.3335 11.9999C13.3335 10.5272 14.5274 9.33325 16.0002 9.33325C17.4729 9.33325 18.6668 10.5272 18.6668 11.9999C18.6668 12.5308 18.5117 13.0254 18.2443 13.441C17.4474 14.6795 16.0002 15.8605 16.0002 17.3333L16.0002 17.9999" stroke="#9498A1" strokeWidth="1.5" strokeLinecap="round"></path><path d="M15.9895 22.6666H16.0015" stroke="#9498A1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"></path></g><defs><clipPath id="clip0_2849_7888"><rect width="32" height="32" rx="16" fill="white"></rect></clipPath></defs></svg>}
                   <strong>{tok.symbol}</strong>
                 </div>
                 <div
                   key={`${tok.mint}-${tok.accountPubkey}-balance`}
-                  className="h-max"
-                  style={{
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
+                  className="h-max token-cell"
                 >
                   {tok.uiAmount.toFixed(2)}
                 </div>
                 <div
                   key={`${tok.mint}-${tok.accountPubkey}-price`}
-                  className="h-max"
-                  style={{
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
+                  className="h-max token-cell"
                 >
                   ${(tok.priceUSD || 0).toFixed(6)}
                 </div>
@@ -924,29 +853,21 @@ export function Statistics({
         </div>
 
         {solBalance != null && (
-          <div style={{ marginTop: 12 }}>
+          <div className="sol-balance">
             <strong>SOL balance:</strong> {solBalance.toFixed(6)} SOL
           </div>
         )}
       </div>
 
       <div className="right">
-        <div style={{ marginBottom: '1rem' }}>
-          <h3 style={{ marginBottom: '0.5rem', fontWeight: 'bold' }}>$HOSICO Conversion Preview</h3>
-          <div style={{ fontSize: '0.875rem', opacity: 0.8 }}>
+        <div className="preview-section">
+          <h3 className="preview-title">$HOSICO Conversion Preview</h3>
+          <div className="token-count">
             Selected tokens: {previewData.selectedCount}
           </div>
 
           {selectedTokens.size > 0 && (
-            <div style={{
-              fontSize: '0.75rem',
-              opacity: 0.7,
-              marginTop: '0.5rem',
-              padding: '0.5rem',
-              backgroundColor: 'rgba(255, 187, 0, 0.05)',
-              borderRadius: '4px',
-              border: '1px solid rgba(255, 187, 0, 0.2)'
-            }}>
+            <div className="process-info">
               💡 Process: Close accounts → Recover SOL rent → Swap tokens to $HOSICO
             </div>
           )}
@@ -968,13 +889,9 @@ export function Statistics({
         </ul>
 
         <button
-          className="btn btn_convert"
+          className={`btn btn_convert ${selectedTokens.size === 0 || isTransacting ? 'disabled' : ''}`}
           disabled={selectedTokens.size === 0 || isTransacting}
           onClick={executeConversion}
-          style={{
-            opacity: selectedTokens.size === 0 || isTransacting ? 0.5 : 1,
-            cursor: selectedTokens.size === 0 || isTransacting ? 'not-allowed' : 'pointer'
-          }}
         >
           {isTransacting
             ? 'Processing...'
@@ -983,21 +900,13 @@ export function Statistics({
         </button>
 
         {transactionStatus && (
-          <div style={{
-            marginTop: '1rem',
-            padding: '0.75rem',
-            borderRadius: '0.5rem',
-            backgroundColor: 'rgba(255, 187, 0, 0.1)',
-            border: '1px solid rgba(255, 187, 0, 0.3)',
-            fontSize: '0.875rem',
-            textAlign: 'center'
-          }}>
+          <div className="transaction-status">
             {transactionStatus}
           </div>
         )}
 
         {hosicoPrice > 0 && (
-          <div style={{ marginTop: '1rem', fontSize: '0.75rem', opacity: 0.6 }}>
+          <div className="price-info">
             $HOSICO Price: ${hosicoPrice.toFixed(6)}
           </div>
         )}

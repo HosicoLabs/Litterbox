@@ -3,7 +3,7 @@ export interface TokenData {
   accountPubkey: string;
   uiAmount: number;
   owner: string;
-  programId: string; // Track which token program this account belongs to
+  programId: string;
   image?: string;
   symbol?: string;
   name?: string;
