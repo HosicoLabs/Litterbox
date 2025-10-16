@@ -209,51 +209,6 @@ export function Statistics({
     }
   };
 
-  const createCloseAccountTransaction = async (
-    tokenAccountPubkey: string,
-    destination: string,
-    authority: string,
-    programId: string
-  ) => {
-    try {
-      if (!account || !signer) {
-        throw new Error('Wallet not connected - account or signer not available');
-      }
-
-      // Get the latest blockhash for the transaction
-      const { value: latestBlockhash } = await client.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
-
-      // Create the close account instruction with program ID support for Token-2022
-      const closeInstruction = createCloseAccountInstruction(
-        tokenAccountPubkey,
-        destination,
-        authority,
-        programId
-      );
-
-      // Create the transaction using gill's createTransaction  
-      const transaction = createTransaction({
-        feePayer: address(publicKey),
-        version: 0,
-        latestBlockhash,
-        instructions: [closeInstruction],
-      });
-
-      // Compile and serialize the transaction
-      const compiledTransaction = compileTransaction(transaction);
-      const serializedTransaction = getBase64EncodedWireTransaction(compiledTransaction);
-
-      // Use executeTransaction to sign and send
-      const signature = await executeTransaction(serializedTransaction, `Close ${tokenAccountPubkey} account`);
-
-      console.log('Close account transaction signature:', signature);
-      return signature;
-    } catch (error) {
-      console.error('Error creating close account transaction:', error);
-      throw error;
-    }
-  };
-
   const executeConversion = async () => {
     if (selectedTokens.size === 0) {
       setTransactionStatus('Please select tokens');
@@ -261,98 +216,85 @@ export function Statistics({
     }
 
     setIsTransacting(true);
-    setTransactionStatus('Preparing transactions...');
+    setTransactionStatus('Preparing batch transaction...');
 
     try {
       const selectedTokensList = tokens.filter(token => selectedTokens.has(token.mint));
 
-      setTransactionStatus(`Processing ${selectedTokensList.length} tokens...`);
+      setTransactionStatus(`Creating close instructions for ${selectedTokensList.length} tokens...`);
 
-      let successCount = 0;
-      let errorCount = 0;
-      let totalSolRecovered = 0;
+      // Create all close account instructions
+      const closeInstructions = [];
+      let totalSolToRecover = 0;
 
-      for (let i = 0; i < selectedTokensList.length; i++) {
-        const token = selectedTokensList[i];
-        setTransactionStatus(`Processing ${token.symbol} (${i + 1}/${selectedTokensList.length})...`);
-
+      for (const token of selectedTokensList) {
         try {
-          const tokenValueUSD = (token.uiAmount || 0) * (token.priceUSD || 0);
-
-          // if (tokenValueUSD > 0.001) {
-          //   try {
-          //     setTransactionStatus(`Swapping ${token.symbol} to $HOSICO...`);
-
-          //     const swapTx = await getJupiterSwapTransaction(
-          //       token.mint,
-          //       token.uiAmount || 0
-          //     );
-
-          //     if (swapTx) {
-          //       const swapSignature = await executeTransaction(
-          //         swapTx,
-          //         `Swap ${token.symbol} to HOSICO`
-          //       );
-          //       console.log(`Swap completed: ${swapSignature}`);
-          //     }
-
-          //   } catch (swapError) {
-          //     console.warn(`Swap failed for ${token.symbol}, proceeding to close account:`, swapError);
-          //   }
-          // }
-
-          // setTransactionStatus(`Closing ${token.symbol} account to recover SOL...`);
-
-          try {
-            setTransactionStatus(`Closing ${token.symbol} account to recover SOL...`);
-
-            // Validate that we own this token account
-            if (token.owner !== publicKey) {
-              console.warn(`Cannot close ${token.symbol} account: owned by ${token.owner}, but wallet is ${publicKey}`);
-              setTransactionStatus(`⚠️ Cannot close ${token.symbol} account: not owned by this wallet`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              return;
-            }
-
-            const closeSignature = await createCloseAccountTransaction(
-              token.accountPubkey,
-              publicKey,
-              token.owner,  // Use the actual owner as the authority
-              token.programId // Pass the program ID for Token-2022 support
-            );
-
-            console.log(`Account closed: ${closeSignature}`);
-            totalSolRecovered += config.tokenAccountRentExemption;
-
-            setTransactionStatus(`✅ Closed ${token.symbol} account, recovered ~${config.tokenAccountRentExemption} SOL`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-          } catch (closeError) {
-            console.warn(`Failed to close account for ${token.symbol}:`, closeError);
-            setTransactionStatus(`⚠️ Could not close ${token.symbol} account: ${closeError instanceof Error ? closeError.message : 'Unknown error'}`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          // Validate that we own this token account
+          if (token.owner !== publicKey) {
+            console.warn(`Cannot close ${token.symbol} account: owned by ${token.owner}, but wallet is ${publicKey}`);
+            setTransactionStatus(`⚠️ Cannot close ${token.symbol} account: not owned by this wallet`);
+            continue;
           }
 
-          successCount++;
+          // Create close instruction for this token
+          const closeInstruction = createCloseAccountInstruction(
+            token.accountPubkey,
+            publicKey,
+            token.owner,
+            token.programId
+          );
+
+          closeInstructions.push(closeInstruction);
+          totalSolToRecover += config.tokenAccountRentExemption;
+
+          console.log(`Added close instruction for ${token.symbol}`);
 
         } catch (error) {
-          console.error(`Failed to process ${token.symbol}:`, error);
-          errorCount++;
-
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          setTransactionStatus(`❌ Failed to process ${token.symbol}: ${errorMessage}`);
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.error(`Failed to create close instruction for ${token.symbol}:`, error);
+          setTransactionStatus(`❌ Failed to prepare ${token.symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
 
-      if (totalSolRecovered > 0.001) {
+      if (closeInstructions.length === 0) {
+        setTransactionStatus('❌ No valid token accounts to close');
+        return;
+      }
+
+      setTransactionStatus(`Executing batch transaction to close ${closeInstructions.length} accounts...`);
+
+      // Get the latest blockhash for the transaction
+      const { value: latestBlockhash } = await client.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
+
+      // Create single transaction with all close instructions
+      const batchTransaction = createTransaction({
+        feePayer: address(publicKey),
+        version: 0,
+        latestBlockhash,
+        instructions: closeInstructions,
+      });
+
+      // Compile and serialize the transaction
+      const compiledTransaction = compileTransaction(batchTransaction);
+      const serializedTransaction = getBase64EncodedWireTransaction(compiledTransaction);
+
+      // Execute the batch transaction
+      const batchSignature = await executeTransaction(
+        serializedTransaction, 
+        `Close ${closeInstructions.length} token accounts`
+      );
+
+      console.log(`Batch transaction completed: ${batchSignature}`);
+
+      setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts! Recovered ~${totalSolToRecover.toFixed(3)} SOL`);
+
+      // Swap recovered SOL to HOSICO if amount is significant
+      if (totalSolToRecover > 0.001) {
         try {
-          setTransactionStatus(`Swapping recovered SOL (${totalSolRecovered.toFixed(3)}) to $HOSICO...`);
+          setTransactionStatus(`Swapping recovered SOL (${totalSolToRecover.toFixed(3)}) to $HOSICO...`);
 
           const solSwapTx = await getJupiterSwapTransaction(
             'So11111111111111111111111111111111111111112',
-            totalSolRecovered
+            totalSolToRecover
           );
 
           if (solSwapTx) {
@@ -361,27 +303,22 @@ export function Statistics({
               `Swap recovered SOL to HOSICO`
             );
             console.log(`SOL swap completed: ${solSwapSignature}`);
+            setTransactionStatus(`✅ Batch processed ${closeInstructions.length} accounts and swapped ${totalSolToRecover.toFixed(3)} SOL to $HOSICO!`);
           }
 
         } catch (solSwapError) {
           console.warn(`Failed to swap recovered SOL:`, solSwapError);
-          setTransactionStatus(`⚠️ Tokens processed but SOL swap failed: ${solSwapError instanceof Error ? solSwapError.message : 'Unknown error'}`);
+          setTransactionStatus(`✅ Closed ${closeInstructions.length} accounts but SOL swap failed: ${solSwapError instanceof Error ? solSwapError.message : 'Unknown error'}`);
         }
       }
 
-      if (errorCount === 0) {
-        setTransactionStatus(`✅ Successfully processed ${successCount} tokens! Recovered ~${totalSolRecovered.toFixed(3)} SOL and swapped to $HOSICO.`);
-        setSelectedTokens(new Set());
-      } else if (successCount > 0) {
-        setTransactionStatus(`⚠️ Partial success: ${successCount} completed, ${errorCount} failed. Recovered ~${totalSolRecovered.toFixed(3)} SOL.`);
-      } else {
-        setTransactionStatus(`❌ All transactions failed (${errorCount} failures). Please check your connection and try again.`);
-      }
+      // Clear selection after successful batch transaction
+      setSelectedTokens(new Set());
 
     } catch (error) {
-      console.error('Critical error in conversion process:', error);
+      console.error('Critical error in batch conversion process:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setTransactionStatus(`❌ Critical error: ${errorMessage}. Please try again or contact support.`);
+      setTransactionStatus(`❌ Batch transaction failed: ${errorMessage}. Please try again.`);
     } finally {
       setIsTransacting(false);
       setTimeout(() => {
