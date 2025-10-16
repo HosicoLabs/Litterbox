@@ -109,8 +109,6 @@ export function Topnav() {
         </li>
         <li className="link link-end">
           <a href="#">
-            <span className="circle"></span>
-
             <WalletDropdown />
           </a>
         </li>

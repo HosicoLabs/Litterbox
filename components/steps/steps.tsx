@@ -1,7 +1,7 @@
 const STEPS = [
   {
     title: "Connect & Scan",
-    desc: "Connect your wallet and let Litter Box analyze its contents. It detects unwanted tokens, spam airdrops, and closeable accounts, then organizes them into a simple list for review.",
+    desc: "Connect your wallet and let Litter Box analyze its contents. It detects closeable accounts, then organizes them into a simple list for review.",
   },
   {
     title: "Review & Choose",
@@ -9,11 +9,7 @@ const STEPS = [
   },
   {
     title: "Confirm Cleanup",
-    desc: "Confirm your selection with a single signature.Litter Box will close token accounts, reclaim rent, and swap or burn the tokens, leaving your wallet clean and optimized.",
-  },
-  {
-    title: "Confirm Cleanup",
-    desc: "Confirm your selection with a single signature.Litter Box will close token accounts, reclaim rent, and swap or burn the tokens, leaving your wallet clean and optimized.",
+    desc: "Confirm your selection with a single signature. Litter Box will close token accounts, reclaim rent, and swap to $HOSICO, leaving your wallet clean and optimized.",
   },
 ];
 export function Steps() {

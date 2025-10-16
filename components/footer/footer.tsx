@@ -92,10 +92,6 @@ export function Footer() {
       <p className="disclaimer">
         Token accounts for discarded assets are closed, returning the rent to
         you as SOL. (Typically 0.0024 SOL per account closed).{" "}
-        <i>
-          If a swap can’t be performed, the token account and amount will be
-          burned instead — keeping your wallet clean.
-        </i>
       </p>
       <div className="content">
         <ul className="links_container">

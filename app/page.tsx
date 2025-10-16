@@ -4,6 +4,7 @@ import { Footer } from "../components/footer/footer";
 import { Hero } from "../components/hero/hero";
 import { useSolana } from "../components/solana/use-solana";
 import { Statistics } from "../components/statistics/statitistics";
+import { StatisticsDisconnected } from "../components/statistics/statistics-disconnected";
 import { Steps } from "../components/steps/steps";
 
 export default function Home() {
@@ -22,7 +23,9 @@ export default function Home() {
             publicKey={publicKey} 
             client={client}
           />
-        ) : ""
+        ) : (
+          <StatisticsDisconnected />
+        )
       }
       <Footer />
     </main>

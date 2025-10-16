@@ -10,11 +10,11 @@ import {
   AccountRole
 } from "gill";
 import { TokenListProvider, ENV as TokenListEnv } from "@solana/spl-token-registry";
-import { UiWalletAccount, useSignAndSendTransaction, useWalletUiSigner } from "@wallet-ui/react";
+import { UiWalletAccount, useSignAndSendTransaction } from "@wallet-ui/react";
 import { TokenData } from "@/types";
 import { config } from "@/config";
 import { fetchTokenPrices } from "@/lib/utils";
-import { getAssociatedTokenAccountAddress, getCloseAccountInstruction, getTransferCheckedInstruction, getTransferInstruction } from "gill/programs";
+import { getAssociatedTokenAccountAddress, getTransferCheckedInstruction } from "gill/programs";
 
 export function Statistics({
   account,
@@ -25,8 +25,6 @@ export function Statistics({
   publicKey: string,
   client: SolanaClient<string>
 }) {
-
-  const signer = useWalletUiSigner({ account });
 
   const signAndSendTransaction = useSignAndSendTransaction(
     account,
@@ -855,7 +853,6 @@ export function Statistics({
           )}
 
           {tokens.map((tok) => {
-            const totalValueUSD = (tok.uiAmount || 0) * (tok.priceUSD || 0);
             const isSelected = selectedTokens.has(tok.mint);
 
             return (
@@ -950,7 +947,7 @@ export function Statistics({
               borderRadius: '4px',
               border: '1px solid rgba(255, 187, 0, 0.2)'
             }}>
-              💡 Process: Swap tokens to $HOSICO → Close accounts → Recover SOL rent
+              💡 Process: Close accounts → Recover SOL rent → Swap tokens to $HOSICO
             </div>
           )}
         </div>

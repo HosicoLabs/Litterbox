@@ -27,7 +27,7 @@ function WalletDropdownItem({ wallet }: { wallet: UiWallet }) {
 
     return (
         <DropdownMenuItem
-            className="cursor-pointer"
+            className="cursor-pointer w-full"
             key={wallet.name}
             onClick={() => {
                 return connect()
@@ -44,18 +44,21 @@ function WalletDropdown() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="cursor-pointer bg-[#ff6900] text-white h-max">
-                    {wallet?.icon ? <WalletAvatar wallet={wallet} /> : null}
-                    {connected ? (account ? ellipsify(account.address) : wallet?.name) : 'Connect Wallet'}
-                </Button>
+                <div className='flex w-full gap-3 justify-between items-center'>
+                    <span className="circle"></span>
+                    <Button variant="outline" className="cursor-pointer bg-[#ff6900] text-white h-max">
+                        {wallet?.icon ? <WalletAvatar wallet={wallet} /> : null}
+                        {connected ? (account ? ellipsify(account.address) : wallet?.name) : 'Connect Wallet'}
+                    </Button>
+                </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent className='bg-[#02000f] border border-gray-700 text-white gap-2 flex flex-col justify-center items-start px-3! py-2!' align="end">
                 {account ? (
                     <>
-                        <DropdownMenuItem className="cursor-pointer" onClick={copy}>
+                        <DropdownMenuItem className="cursor-pointer w-full" onClick={copy}>
                             Copy address
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="cursor-pointer" onClick={disconnect}>
+                        <DropdownMenuItem className="cursor-pointer w-full" onClick={disconnect}>
                             Disconnect
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
