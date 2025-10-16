@@ -12,4 +12,5 @@ export interface TokenData {
   closeAuthority?: string;
   delegate?: string;
   delegatedAmount?: string | number;
+  extensions?: any[];
 }

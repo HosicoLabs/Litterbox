@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   createTransaction,
   address,
@@ -32,6 +32,7 @@ export function Statistics({
   )
 
   const [tokens, setTokens] = useState<TokenData[]>([]);
+  const [rawAccounts, setRawAccounts] = useState<TokenData[]>([]);
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
 
   const [solBalance, setSolBalance] = useState<number | null>(null);
@@ -39,11 +40,33 @@ export function Statistics({
 
   const [isTransacting, setIsTransacting] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingPageData, setLoadingPageData] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [transactionStatus, setTransactionStatus] = useState<string>('');
 
-  const handleTokenSelect = (tokenMint: string) => {
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const ITEMS_PER_PAGE = 8;
+
+  const paginationData = useMemo(() => {
+    const totalPages = Math.ceil(rawAccounts.length / ITEMS_PER_PAGE);
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const currentPageAccounts = rawAccounts.slice(startIndex, endIndex);
+    
+    return {
+      totalPages,
+      startIndex,
+      endIndex,
+      currentPageAccounts
+    };
+  }, [rawAccounts, currentPage, ITEMS_PER_PAGE]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [rawAccounts.length]);
+
+  const handleTokenSelect = useCallback((tokenMint: string) => {
     const newSelected = new Set(selectedTokens);
     if (newSelected.has(tokenMint)) {
       newSelected.delete(tokenMint);
@@ -51,18 +74,18 @@ export function Statistics({
       newSelected.add(tokenMint);
     }
     setSelectedTokens(newSelected);
-  };
+  }, [selectedTokens]);
 
-  const handleSelectAll = () => {
-    if (selectedTokens.size === tokens.length) {
+  const handleSelectAll = useCallback(() => {
+    if (selectedTokens.size === rawAccounts.length) {
       setSelectedTokens(new Set());
     } else {
-      setSelectedTokens(new Set(tokens.map(token => token.mint)));
+      setSelectedTokens(new Set(rawAccounts.map(token => token.mint)));
     }
-  };
+  }, [selectedTokens, rawAccounts]);
 
-  const calculateHosicoPreview = () => {
-    const selectedTokensList = tokens.filter(token => selectedTokens.has(token.mint));
+  const previewData = useMemo(() => {
+    const selectedTokensList = rawAccounts.filter(token => selectedTokens.has(token.mint));
 
     const totalTokenValueUSD = selectedTokensList.reduce((sum, token) => {
       const tokenValueUSD = (token.uiAmount || 0) * (token.priceUSD || 0);
@@ -84,9 +107,7 @@ export function Statistics({
       solRecoveryValueUSD,
       selectedCount: selectedTokensList.length
     };
-  };
-
-  const previewData = calculateHosicoPreview();
+  }, [rawAccounts, selectedTokens, hosicoPrice]);
 
   const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
@@ -240,7 +261,7 @@ export function Statistics({
     setTransactionStatus('Preparing batch transaction...');
 
     try {
-      const selectedTokensList = tokens.filter(token => selectedTokens.has(token.mint));
+      const selectedTokensList = rawAccounts.filter(token => selectedTokens.has(token.mint));
 
       setTransactionStatus(`Creating close instructions for ${selectedTokensList.length} tokens...`);
 
@@ -551,6 +572,7 @@ export function Statistics({
 
   useEffect(() => {
     if (!publicKey) {
+      setRawAccounts([]);
       setTokens([]);
       setSolBalance(null);
       return;
@@ -597,6 +619,28 @@ export function Statistics({
               const delegatedAmount = info.delegatedAmount;
               const isNative = info.isNative;
               
+              const extensions = info.extensions;
+              let hasWithheldFees = false;
+              
+              if (extensions && Array.isArray(extensions)) {
+                for (const extension of extensions) {
+                  if (extension.extension === 'transferFeeAmount') {
+                    const withheldAmount = extension.state?.withheldAmount;
+                    if (withheldAmount) {
+                      const withheldValue = typeof withheldAmount === 'bigint' ? Number(withheldAmount) : Number(withheldAmount);
+                      if (withheldValue > 0) {
+                        hasWithheldFees = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              if (hasWithheldFees) {
+                return null;
+              }
+              
               if (isNative) {
                 return null;
               }
@@ -626,7 +670,8 @@ export function Statistics({
                 state,
                 closeAuthority,
                 delegate,
-                delegatedAmount
+                delegatedAmount,
+                extensions
               };
             } else {
               return null;
@@ -659,8 +704,45 @@ export function Statistics({
           return totalValueUSD < 1.0;
         });
 
+        const basicAccounts = highValueTokens.map(token => ({
+          ...token,
+          priceUSD: priceMap[token.mint] || 0,
+          symbol: token.mint.slice(0, 8) + '...',
+          name: 'Loading...',
+          image: ''
+        }));
+
+        if (!mounted) return;
+        setRawAccounts(basicAccounts);
+        setSolBalance(sol);
+      } catch (err: any) {
+        console.error("rpc error", err);
+        if (mounted) setError(String(err?.message ?? err));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [publicKey, client]);
+
+  useEffect(() => {
+    const { currentPageAccounts } = paginationData;
+    
+    if (currentPageAccounts.length === 0) {
+      setTokens([]);
+      return;
+    }
+
+    let mounted = true;
+    setLoadingPageData(true);
+
+    (async () => {
+      try {
         const accountsToShow = await Promise.all(
-          highValueTokens.slice(0, 5).map(async (t) => {
+          currentPageAccounts.map(async (t: TokenData) => {
             const options = {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -679,37 +761,42 @@ export function Statistics({
           })
         );
 
-        const formattedAccounts = highValueTokens.map((token, index) => {
+        const formattedAccounts = currentPageAccounts.map((token: TokenData, index: number) => {
           const assetData = accountsToShow[index];
-          const priceUSD = priceMap[token.mint] || 0;
           return {
             mint: token.mint,
             accountPubkey: token.accountPubkey,
             uiAmount: token.uiAmount,
             owner: token.owner,
             programId: token.programId,
+            state: token.state,
+            closeAuthority: token.closeAuthority,
+            delegate: token.delegate,
+            delegatedAmount: token.delegatedAmount,
+            extensions: token.extensions,
             image: assetData?.result?.content?.links?.image || '',
             symbol: assetData?.result?.content?.metadata?.symbol || token.mint.slice(0, 8) + '...',
             name: assetData?.result?.content?.metadata?.name || 'Unknown Token',
-            priceUSD: priceUSD
+            priceUSD: token.priceUSD
           };
         });
 
         if (!mounted) return;
         setTokens(formattedAccounts);
-        setSolBalance(sol);
-      } catch (err: any) {
-        console.error("rpc error", err);
-        if (mounted) setError(String(err?.message ?? err));
+      } catch (err) {
+        console.error("Failed to fetch page token data:", err);
+        if (mounted) {
+          setTokens(currentPageAccounts);
+        }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setLoadingPageData(false);
       }
     })();
 
     return () => {
       mounted = false;
     };
-  }, [publicKey, client, tokenMap]);
+  }, [paginationData, config.rpcUrl]);
 
   return (
     <div id="statsistics" className="statistics">
@@ -721,8 +808,8 @@ export function Statistics({
                 onClick={handleSelectAll}
                 className="select-all-btn"
               >
-                <div className={`checkbox ${selectedTokens.size === tokens.length && tokens.length > 0 ? 'checked' : ''}`}>
-                  {selectedTokens.size === tokens.length && tokens.length > 0 && (
+                <div className={`checkbox ${selectedTokens.size === rawAccounts.length && rawAccounts.length > 0 ? 'checked' : ''}`}>
+                  {selectedTokens.size === rawAccounts.length && rawAccounts.length > 0 && (
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="white">
                       <path d="M10 3L4.5 8.5L2 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -800,6 +887,43 @@ export function Statistics({
             );
           })}
         </div>
+
+        {/* Pagination Controls */}
+        {rawAccounts.length > ITEMS_PER_PAGE && (
+          <div className="pagination-controls">
+            <div className="pagination-info">
+              Showing {paginationData.startIndex + 1}-{Math.min(paginationData.endIndex, rawAccounts.length)} of {rawAccounts.length} tokens
+              {loadingPageData && <span> (Loading...)</span>}
+            </div>
+            <div className="pagination-buttons">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="pagination-btn"
+              >
+                Previous
+              </button>
+              
+              {Array.from({ length: paginationData.totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
+                >
+                  {page}
+                </button>
+              ))}
+              
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, paginationData.totalPages))}
+                disabled={currentPage === paginationData.totalPages}
+                className="pagination-btn"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
         {solBalance != null && (
           <div className="sol-balance">
