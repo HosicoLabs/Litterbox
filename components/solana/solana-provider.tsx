@@ -1,10 +1,14 @@
 import { ReactNode } from 'react'
-import { createSolanaDevnet, createSolanaLocalnet, createSolanaMainnet, createWalletUiConfig, WalletUi } from '@wallet-ui/react'
+import { createSolanaMainnet, createWalletUiConfig, WalletUi } from '@wallet-ui/react'
 import { WalletUiGillProvider } from '@wallet-ui/react-gill'
 import { solanaMobileWalletAdapter } from './solana-mobile-wallet-adapter'
 
+import { config as appConfig } from '@/config'
+
 const config = createWalletUiConfig({
-  clusters: [createSolanaMainnet(), createSolanaDevnet(), createSolanaLocalnet()],
+  clusters: [createSolanaMainnet({
+    url: appConfig.rpcUrl
+  })],
 })
 
 solanaMobileWalletAdapter({ clusters: config.clusters })

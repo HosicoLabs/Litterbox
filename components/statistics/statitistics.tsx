@@ -1,38 +1,38 @@
 'use client'
 
-import { useEffect, useMemo, useState } from "react";
-import { useSolana } from "../solana/use-solana";
-import { createSolanaRpc, mainnet } from "gill";
+import { useEffect, useState } from "react";
+import {
+  createTransaction,
+  address,
+  signAndSendTransactionMessageWithSigners,
+  getBase58Decoder,
+  SolanaClient,
+  compileTransaction,
+  getBase64EncodedWireTransaction
+} from "gill";
 import { TokenListProvider, ENV as TokenListEnv } from "@solana/spl-token-registry";
-import { UiWalletAccount, useSignAndSendTransaction,  } from "@wallet-ui/react";
+import { UiWalletAccount, useSignAndSendTransaction, useWalletUiSigner } from "@wallet-ui/react";
 import { TokenData } from "@/types";
 import { config } from "@/config";
 import { fetchTokenPrices } from "@/lib/utils";
+import { getCloseAccountInstruction } from "gill/programs";
 
-export function Statistics() {
-  const { connected, wallet } = useSolana();
+export function Statistics({
+  account,
+  publicKey,
+  client
+}: {
+  account: UiWalletAccount,
+  publicKey: string,
+  client: SolanaClient<string>
+}) {
 
-  const account = wallet?.accounts?.[0] as UiWalletAccount;
+  const signer = useWalletUiSigner({ account });
 
-  // // Debug logging
-  // console.log('Statistics component state:', { 
-  //   connected, 
-  //   wallet, 
-  //   account,
-  //   hasAccounts: wallet?.accounts?.length 
-  // });
-
-  // Ensure we only pass a valid account object
-  // const validAccount = account && account.address ? account : undefined;
-
-  // const signAndSendTransaction = validAccount ? useSignAndSendTransaction(
-  //   validAccount,
-  //   'solana:mainnet'
-  // ) : null
-
-  const rpc = useMemo(() => {
-    return createSolanaRpc(mainnet(config.rpcUrl));
-  }, []);
+  const signAndSendTransaction = useSignAndSendTransaction(
+    account,
+    'solana:mainnet'
+  )
 
   const [loading, setLoading] = useState(false);
   const [tokens, setTokens] = useState<TokenData[]>([]);
@@ -43,7 +43,6 @@ export function Statistics() {
   const [isTransacting, setIsTransacting] = useState(false);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
 
-  const publicKey = wallet?.accounts?.[0]?.address ?? null;
 
   const handleTokenSelect = (tokenMint: string) => {
     const newSelected = new Set(selectedTokens);
@@ -142,15 +141,32 @@ export function Statistics() {
     }
   };
 
+  const createCloseAccountInstruction = (
+    tokenAccountPubkey: string,
+    destination: string,
+    authority: string,
+    programId: string
+  ) => {
+    try {
+      const closeInstruction = getCloseAccountInstruction({
+        account: address(tokenAccountPubkey),
+        destination: address(destination),
+        owner: address(authority)
+      }, {
+        programAddress: address(programId)
+      });
+      return closeInstruction;
+    } catch (error) {
+      console.error('Error creating close account instruction:', error);
+      throw error;
+    }
+  };
+
   const executeTransaction = async (transactionData: string | Uint8Array, description: string) => {
     try {
-      if (!connected || !wallet?.accounts?.[0]) {
-        throw new Error('Wallet not connected');
+      if (!signAndSendTransaction) {
+        throw new Error('Transaction signing not available - wallet not properly connected');
       }
-
-      // if (!signAndSendTransaction) {
-      //   throw new Error('Transaction signing not available - wallet not properly connected');
-      // }
 
       console.log(`Executing transaction: ${description}`);
 
@@ -170,9 +186,8 @@ export function Statistics() {
       }
 
       try {
-        // const signature = await signAndSendTransaction({ transaction: transactionBytes });
-        // console.log(signature);
-        const signature = ''
+        const signature = await signAndSendTransaction({ transaction: transactionBytes });
+        console.log(signature);
         return signature;
       } catch (signError) {
         if (signError instanceof Error) {
@@ -197,11 +212,42 @@ export function Statistics() {
   const createCloseAccountTransaction = async (
     tokenAccountPubkey: string,
     destination: string,
-    authority: string
+    authority: string,
+    programId: string
   ) => {
     try {
+      if (!account || !signer) {
+        throw new Error('Wallet not connected - account or signer not available');
+      }
 
-      return null;
+      // Get the latest blockhash for the transaction
+      const { value: latestBlockhash } = await client.rpc.getLatestBlockhash({ commitment: 'confirmed' }).send();
+
+      // Create the close account instruction with program ID support for Token-2022
+      const closeInstruction = createCloseAccountInstruction(
+        tokenAccountPubkey,
+        destination,
+        authority,
+        programId
+      );
+
+      // Create the transaction using gill's createTransaction  
+      const transaction = createTransaction({
+        feePayer: address(publicKey),
+        version: 0,
+        latestBlockhash,
+        instructions: [closeInstruction],
+      });
+
+      // Compile and serialize the transaction
+      const compiledTransaction = compileTransaction(transaction);
+      const serializedTransaction = getBase64EncodedWireTransaction(compiledTransaction);
+
+      // Use executeTransaction to sign and send
+      const signature = await executeTransaction(serializedTransaction, `Close ${tokenAccountPubkey} account`);
+
+      console.log('Close account transaction signature:', signature);
+      return signature;
     } catch (error) {
       console.error('Error creating close account transaction:', error);
       throw error;
@@ -209,13 +255,8 @@ export function Statistics() {
   };
 
   const executeConversion = async () => {
-    if (!publicKey || !wallet || selectedTokens.size === 0) {
-      setTransactionStatus('Please connect wallet and select tokens');
-      return;
-    }
-
-    if (!connected || !wallet?.accounts?.[0]?.address) {
-      setTransactionStatus('Wallet not connected. Please reconnect your wallet.');
+    if (selectedTokens.size === 0) {
+      setTransactionStatus('Please select tokens');
       return;
     }
 
@@ -238,49 +279,53 @@ export function Statistics() {
         try {
           const tokenValueUSD = (token.uiAmount || 0) * (token.priceUSD || 0);
 
-          if (tokenValueUSD > 0.001) {
-            try {
-              setTransactionStatus(`Swapping ${token.symbol} to $HOSICO...`);
+          // if (tokenValueUSD > 0.001) {
+          //   try {
+          //     setTransactionStatus(`Swapping ${token.symbol} to $HOSICO...`);
 
-              const swapTx = await getJupiterSwapTransaction(
-                token.mint,
-                token.uiAmount || 0
-              );
+          //     const swapTx = await getJupiterSwapTransaction(
+          //       token.mint,
+          //       token.uiAmount || 0
+          //     );
 
-              if (swapTx) {
-                const swapSignature = await executeTransaction(
-                  swapTx,
-                  `Swap ${token.symbol} to HOSICO`
-                );
-                console.log(`Swap completed: ${swapSignature}`);
-              }
+          //     if (swapTx) {
+          //       const swapSignature = await executeTransaction(
+          //         swapTx,
+          //         `Swap ${token.symbol} to HOSICO`
+          //       );
+          //       console.log(`Swap completed: ${swapSignature}`);
+          //     }
 
-            } catch (swapError) {
-              console.warn(`Swap failed for ${token.symbol}, proceeding to close account:`, swapError);
-            }
-          }
+          //   } catch (swapError) {
+          //     console.warn(`Swap failed for ${token.symbol}, proceeding to close account:`, swapError);
+          //   }
+          // }
 
-          setTransactionStatus(`Closing ${token.symbol} account to recover SOL...`);
+          // setTransactionStatus(`Closing ${token.symbol} account to recover SOL...`);
 
           try {
-            const closeAccountTx = await createCloseAccountTransaction(
+            setTransactionStatus(`Closing ${token.symbol} account to recover SOL...`);
+
+            // Validate that we own this token account
+            if (token.owner !== publicKey) {
+              console.warn(`Cannot close ${token.symbol} account: owned by ${token.owner}, but wallet is ${publicKey}`);
+              setTransactionStatus(`⚠️ Cannot close ${token.symbol} account: not owned by this wallet`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              return;
+            }
+
+            const closeSignature = await createCloseAccountTransaction(
               token.accountPubkey,
               publicKey,
-              publicKey
+              token.owner,  // Use the actual owner as the authority
+              token.programId // Pass the program ID for Token-2022 support
             );
 
-            if (closeAccountTx) {
-              const closeSignature = await executeTransaction(
-                closeAccountTx,
-                `Close ${token.symbol} account`
-              );
+            console.log(`Account closed: ${closeSignature}`);
+            totalSolRecovered += config.tokenAccountRentExemption;
 
-              console.log(`Account closed: ${closeSignature}`);
-              totalSolRecovered += config.tokenAccountRentExemption;
-
-              setTransactionStatus(`✅ Closed ${token.symbol} account, recovered ~${config.tokenAccountRentExemption} SOL`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+            setTransactionStatus(`✅ Closed ${token.symbol} account, recovered ~${config.tokenAccountRentExemption} SOL`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
           } catch (closeError) {
             console.warn(`Failed to close account for ${token.symbol}:`, closeError);
@@ -427,7 +472,7 @@ export function Statistics() {
             if (quoteData.outAmount) {
               const solAmount = 1;
               const hosicoAmount = parseInt(quoteData.outAmount) / Math.pow(10, 6);
-              const solPriceUSD = 200; 
+              const solPriceUSD = 200;
               const impliedPrice = (solAmount * solPriceUSD) / hosicoAmount;
 
               if (impliedPrice > 0 && impliedPrice < 1000) {
@@ -478,7 +523,7 @@ export function Statistics() {
   const [tokenMap, setTokenMap] = useState(new Map());
 
   useEffect(() => {
-    if (!publicKey || !connected) {
+    if (!publicKey) {
       setTokens([]);
       setSolBalance(null);
       return;
@@ -490,12 +535,25 @@ export function Statistics() {
 
     (async () => {
       try {
-        const tokenProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        const standardTokenProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        const token2022ProgramId = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
-        const respPromise = rpc.getTokenAccountsByOwner(publicKey as any, { programId: tokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "finalized" });
-        const resp = await respPromise.send();
-        console.log(resp)
-        const accounts: TokenData[] = ((resp as any)?.value ?? []).map((item: any): TokenData | null => {
+        // Fetch token accounts from both programs
+        const [standardTokensResp, token2022Resp] = await Promise.all([
+          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "finalized" }).send(),
+          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "finalized" }).send()
+        ]);
+
+        console.log("Standard token accounts response:", standardTokensResp);
+        console.log("Token-2022 accounts response:", token2022Resp);
+
+        // Combine accounts from both programs
+        const allTokenAccounts = [
+          ...((standardTokensResp as any)?.value ?? []).map((item: any) => ({ ...item, programId: standardTokenProgramId })),
+          ...((token2022Resp as any)?.value ?? []).map((item: any) => ({ ...item, programId: token2022ProgramId }))
+        ];
+
+        const accounts: TokenData[] = allTokenAccounts.map((item: any): TokenData | null => {
           try {
             if (item?.account?.data?.parsed?.info?.tokenAmount?.decimals === 0) return null;
             if (item?.account?.data?.parsed?.info?.mint === config.hosicoMint) return null;
@@ -505,13 +563,18 @@ export function Statistics() {
               const parsed = item.account?.data?.parsed ?? {};
               const info = parsed.info ?? {};
               const mint = info.mint;
+              const owner = info.owner; // Extract the actual owner/authority
               const tokenAmount = info.tokenAmount ?? {};
               const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
+
+              console.log(`Token account ${pubkey}: mint=${mint}, owner=${owner}, uiAmount=${uiAmount}, program=${item.programId}`);
 
               return {
                 mint,
                 accountPubkey: pubkey,
                 uiAmount,
+                owner,
+                programId: item.programId,
               };
             } else {
               return null
@@ -520,13 +583,13 @@ export function Statistics() {
             console.warn("malformed token account item", innerErr, item);
             return null;
           }
-        }).filter(Boolean);
+        }).filter(Boolean) as TokenData[];
 
         console.log(`Found ${accounts.length} token accounts total`);
 
         let sol = null;
         try {
-          const balRespPromise = rpc.getBalance(publicKey as any, { commitment: "finalized" });
+          const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "finalized" });
           const balResp = await balRespPromise.send();
           const lamports = typeof balResp === "number" ? balResp : ((balResp as any)?.value ?? null);
           if (lamports != null) {
@@ -548,7 +611,7 @@ export function Statistics() {
         });
 
         const accountsToShow = await Promise.all(
-          highValueTokens.map(async (t) => {
+          highValueTokens.slice(0, 5).map(async (t) => {
             const options = {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -574,6 +637,8 @@ export function Statistics() {
             mint: token.mint,
             accountPubkey: token.accountPubkey,
             uiAmount: token.uiAmount,
+            owner: token.owner,
+            programId: token.programId,
             image: assetData?.result?.content?.links?.image || '',
             symbol: assetData?.result?.content?.metadata?.symbol || token.mint.slice(0, 8) + '...',
             name: assetData?.result?.content?.metadata?.name || 'Unknown Token',
@@ -595,7 +660,7 @@ export function Statistics() {
     return () => {
       mounted = false;
     };
-  }, [publicKey, connected, rpc, tokenMap]);
+  }, [publicKey, client, tokenMap]);
 
   return (
     <div id="statsistics" className="statistics">
@@ -663,15 +728,9 @@ export function Statistics() {
 
           </div>
 
-          {!connected && (
-            <div className="grid grid-cols-1 gap-4">
-              <div style={{ padding: '16px', textAlign: 'center' }}>
-                Please connect your wallet.
-              </div>
-            </div>
-          )}
 
-          {connected && loading && (
+
+          {loading && (
             <div className="grid grid-cols-1 gap-4">
               <div style={{ padding: '16px', textAlign: 'center' }}>
                 Scanning wallet...
@@ -679,7 +738,7 @@ export function Statistics() {
             </div>
           )}
 
-          {connected && !loading && error && (
+          {!loading && error && (
             <div className="grid grid-cols-1 gap-4">
               <div style={{ padding: '16px', textAlign: 'center', color: 'red' }}>
                 Error: {error}
@@ -687,7 +746,7 @@ export function Statistics() {
             </div>
           )}
 
-          {connected && !loading && !error && tokens.length === 0 && (
+          {!loading && !error && tokens.length === 0 && (
             <div className="grid grid-cols-1 gap-4">
               <div style={{ padding: '16px', textAlign: 'center' }}>
                 No tokens found with value {'<'}$1.
@@ -767,7 +826,7 @@ export function Statistics() {
           })}
         </div>
 
-        {connected && solBalance != null && (
+        {solBalance != null && (
           <div style={{ marginTop: 12 }}>
             <strong>SOL balance:</strong> {solBalance.toFixed(6)} SOL
           </div>
