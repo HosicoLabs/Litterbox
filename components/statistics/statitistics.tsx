@@ -10,7 +10,6 @@ import {
   AccountRole,
   LAMPORTS_PER_SOL
 } from "gill";
-import { TokenListProvider, ENV as TokenListEnv } from "@solana/spl-token-registry";
 import { UiWalletAccount, useSignAndSendTransaction } from "@wallet-ui/react";
 import { TokenData } from "@/types";
 import { config } from "@/config";
@@ -200,11 +199,11 @@ export function Statistics({
       let price = 200; // fallback
 
       try {
-        const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`);
+        const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.sol.mint}`);
 
         if (v3Response.ok) {
           const v3Data = await v3Response.json();
-          const solData = v3Data['So11111111111111111111111111111111111111112'];
+          const solData = v3Data[config.tokens.sol.mint];
           if (solData && typeof solData.usdPrice === 'number') {
             price = solData.usdPrice;
             setSolPrice(price);
@@ -231,11 +230,11 @@ export function Statistics({
       }
 
       try {
-        const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112`);
+        const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.sol.mint}`);
 
         if (v2Response.ok) {
           const v2Data = await v2Response.json();
-          price = v2Data.data?.['So11111111111111111111111111111111111111112']?.price || 200;
+          price = v2Data.data?.[config.tokens.sol.mint]?.price || 200;
           if (price > 0) {
             setSolPrice(price);
             return;
@@ -306,7 +305,7 @@ export function Statistics({
       }
 
       try {
-        const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.tokens.hosico.mint}&amount=1000000000&slippageBps=50`);
+        const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${config.tokens.sol.mint}&outputMint=${config.tokens.hosico.mint}&amount=1000000000&slippageBps=50`);
 
         if (quoteResponse.ok) {
           const quoteData = await quoteResponse.json();
@@ -877,6 +876,18 @@ export function Statistics({
             </div>
           )}
 
+          {!loading && !error && publicKey && tokens.length === 0 && (
+            <div className="grid grid-cols-1 gap-4">
+              <div className="empty-state">
+                🎉 Great news! Your wallet is clean!
+                <br />
+                <span className="empty-state-subtitle">
+                  No empty token accounts found that need closing.
+                </span>
+              </div>
+            </div>
+          )}
+
           {tokens.map((tok) => {
             const isSelected = selectedTokens.has(tok.mint);
 
@@ -970,6 +981,12 @@ export function Statistics({
               💡 Process: Close accounts → Recover SOL rent → Swap SOL to $HOSICO
             </div>
           )}
+
+          {!loading && !error && publicKey && tokens.length === 0 && (
+            <div className="no-tokens-info">
+              ✨ Your wallet is already optimized! No empty token accounts to close.
+            </div>
+          )}
         </div>
 
         <ul className="convertion_container">
@@ -978,7 +995,7 @@ export function Statistics({
             <p className="status">Total Value (USD)</p>
           </div>
           <div className="convertion">
-            <p className="amount">{Number(previewData.hosicoAmount.toFixed(2)) - (Number(previewData.hosicoAmount.toFixed(2)) * config.txTip)} $HOSICO</p>
+            <p className="amount">{(Number(previewData.hosicoAmount.toFixed(2)) - (Number(previewData.hosicoAmount.toFixed(2)) * config.txTip)).toFixed(2)} $HOSICO</p>
             <p className="status">You will receive</p>
           </div>
           <div className="convertion">
@@ -994,7 +1011,11 @@ export function Statistics({
         >
           {isTransacting
             ? 'Processing...'
-            : `Convert ${selectedTokens.size > 0 ? `${selectedTokens.size} token${selectedTokens.size > 1 ? 's' : ''}` : ''} to $HOSICO`
+            : tokens.length === 0 && !loading && !error && publicKey
+            ? 'No tokens to convert'
+            : selectedTokens.size > 0
+            ? `Convert ${selectedTokens.size} token${selectedTokens.size > 1 ? 's' : ''} to $HOSICO`
+            : 'Select tokens to convert'
           }
         </button>
 

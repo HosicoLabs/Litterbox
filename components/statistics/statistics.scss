@@ -270,6 +270,38 @@
     .error-state {
       color: red;
     }
+
+    .empty-state {
+      color: var(--color-orange);
+      font-size: 1.1rem;
+      padding: 2rem 1rem;
+      background: linear-gradient(
+        180deg,
+        rgba(29, 32, 52, 0.2) 0%,
+        rgba(13, 17, 39, 0.2) 50%,
+        rgba(29, 32, 52, 0.2) 100%
+      );
+      border: 1px solid rgba(255, 187, 0, 0.2);
+      border-radius: 0.75rem;
+      margin: 1rem 0;
+
+      .empty-state-subtitle {
+        display: block;
+        font-size: 0.9rem;
+        opacity: 0.8;
+        margin-top: 0.5rem;
+        font-weight: normal;
+      }
+
+      @include mixins.screen-size("md") {
+        font-size: 1.2rem;
+        padding: 2.5rem 1.5rem;
+
+        .empty-state-subtitle {
+          font-size: 1rem;
+        }
+      }
+    }
   }
 
   .sol-balance {
@@ -297,6 +329,23 @@
       background-color: rgba(255, 187, 0, 0.05);
       border-radius: 0.25rem;
       border: 1px solid rgba(255, 187, 0, 0.2);
+    }
+
+    .no-tokens-info {
+      font-size: 0.875rem;
+      margin-top: 0.75rem;
+      padding: 1rem;
+      background: linear-gradient(
+        180deg,
+        rgba(29, 32, 52, 0.3) 0%,
+        rgba(13, 17, 39, 0.3) 50%,
+        rgba(29, 32, 52, 0.3) 100%
+      );
+      border: 1px solid rgba(255, 187, 0, 0.3);
+      border-radius: 0.5rem;
+      text-align: center;
+      color: var(--color-orange);
+      font-weight: 500;
     }
   }
 
