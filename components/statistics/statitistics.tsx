@@ -16,6 +16,7 @@ import { TokenData } from "@/types";
 import { config } from "@/config";
 import { fetchTokenPrices } from "@/lib/utils";
 import { getAssociatedTokenAccountAddress, getTransferCheckedInstruction } from "gill/programs";
+import bs58 from 'bs58';
 
 export function Statistics({
   account,
@@ -46,8 +47,376 @@ export function Statistics({
   const [error, setError] = useState<string | null>(null);
 
   const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const [batchSignature, setBatchSignature] = useState<string>('');
 
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  const refreshTokenList = useCallback(async () => {
+    if (!publicKey) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const standardTokenProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+      const token2022ProgramId = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+      const [standardTokensResp, token2022Resp] = await Promise.all([
+        client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send(),
+        client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send()
+      ]);
+
+      const allTokenAccounts = [
+        ...((standardTokensResp as any)?.value ?? []).map((item: any) => ({ ...item, programId: standardTokenProgramId })),
+        ...((token2022Resp as any)?.value ?? []).map((item: any) => ({ ...item, programId: token2022ProgramId }))
+      ];
+
+      const accounts: TokenData[] = allTokenAccounts.map((item: any): TokenData | null => {
+        try {
+          if (item?.account?.data?.parsed?.info?.tokenAmount?.decimals === 0) return null;
+          if (item?.account?.data?.parsed?.info?.mint === config.tokens.hosico.mint) return null;
+          if (item?.account?.data?.parsed?.info?.mint === config.tokens.sol.mint) return null;
+
+          const parsed = item.account?.data?.parsed ?? {};
+          const info = parsed.info ?? {};
+          const tokenAmount = info.tokenAmount ?? {};
+          const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
+
+          if (uiAmount === 0) {
+            const pubkey = item.pubkey;
+            const mint = info.mint;
+            const owner = info.owner;
+
+            const state = info.state;
+            const closeAuthority = info.closeAuthority;
+            const delegate = info.delegate;
+            const delegatedAmount = info.delegatedAmount;
+            const isNative = info.isNative;
+
+            const extensions = info.extensions;
+            let hasWithheldFees = false;
+
+            if (extensions && Array.isArray(extensions)) {
+              for (const extension of extensions) {
+                if (extension.extension === 'transferFeeAmount') {
+                  const withheldAmount = extension.state?.withheldAmount;
+                  if (withheldAmount) {
+                    const withheldValue = typeof withheldAmount === 'bigint' ? Number(withheldAmount) : Number(withheldAmount);
+                    if (withheldValue > 0) {
+                      hasWithheldFees = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (hasWithheldFees) {
+              return null;
+            }
+
+            if (isNative) {
+              return null;
+            }
+
+            if (state && state !== 'initialized') {
+              return null;
+            }
+
+            if (delegate && delegatedAmount && Number(delegatedAmount) > 0) {
+              return null;
+            }
+
+            if (closeAuthority && closeAuthority !== owner) {
+              return null;
+            }
+
+            if (owner !== publicKey) {
+              return null;
+            }
+
+            return {
+              mint,
+              accountPubkey: pubkey,
+              uiAmount,
+              owner,
+              programId: item.programId,
+              state,
+              closeAuthority,
+              delegate,
+              delegatedAmount,
+              extensions
+            };
+          } else {
+            return null;
+          }
+        } catch (innerErr) {
+          console.warn("malformed token account item", innerErr, item);
+          return null;
+        }
+      }).filter(Boolean) as TokenData[];
+
+      let sol = null;
+      try {
+        const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "confirmed" });
+        const balResp = await balRespPromise.send();
+        const lamports = typeof balResp === "number" ? balResp : ((balResp as any)?.value ?? null);
+        if (lamports != null) {
+          sol = Number(lamports) / LAMPORTS_PER_SOL;
+        }
+      } catch (balErr) {
+        console.warn("failed to fetch SOL balance", balErr);
+      }
+
+      const allTokenMints = accounts.map(t => t.mint);
+      const priceMap = await fetchTokenPrices(allTokenMints);
+
+      const highValueTokens = accounts.filter(token => {
+        const priceUSD = priceMap[token.mint] || 0;
+        const totalValueUSD = (token.uiAmount || 0) * priceUSD;
+        return totalValueUSD < 1.0;
+      });
+
+      const basicAccounts = highValueTokens.map(token => ({
+        ...token,
+        priceUSD: priceMap[token.mint] || 0,
+        symbol: token.mint.slice(0, 8) + '...',
+        name: 'Loading...',
+        image: ''
+      }));
+
+      setRawAccounts(basicAccounts);
+      setSolBalance(sol);
+    } catch (err: any) {
+      console.error("rpc error", err);
+      setError(String(err?.message ?? err));
+    } finally {
+      setLoading(false);
+    }
+  }, [publicKey, client]);
+
+  const fetchSolPrice = useCallback(async () => {
+    try {
+      let price = 200; // fallback
+
+      try {
+        const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`);
+
+        if (v3Response.ok) {
+          const v3Data = await v3Response.json();
+          const solData = v3Data['So11111111111111111111111111111111111111112'];
+          if (solData && typeof solData.usdPrice === 'number') {
+            price = solData.usdPrice;
+            setSolPrice(price);
+            return;
+          }
+        }
+      } catch (v3Error) {
+        console.warn('Jupiter v3 failed for SOL price:', v3Error);
+      }
+
+      try {
+        const cgResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+
+        if (cgResponse.ok) {
+          const cgData = await cgResponse.json();
+          price = cgData.solana?.usd || 200;
+          if (price > 0) {
+            setSolPrice(price);
+            return;
+          }
+        }
+      } catch (cgError) {
+        console.warn('CoinGecko failed for SOL price:', cgError);
+      }
+
+      try {
+        const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112`);
+
+        if (v2Response.ok) {
+          const v2Data = await v2Response.json();
+          price = v2Data.data?.['So11111111111111111111111111111111111111112']?.price || 200;
+          if (price > 0) {
+            setSolPrice(price);
+            return;
+          }
+        }
+      } catch (v2Error) {
+        console.warn('Jupiter v2 failed for SOL price:', v2Error);
+      }
+
+      setSolPrice(price);
+
+    } catch (error) {
+      console.warn('Failed to fetch SOL price, using fallback:', error);
+      setSolPrice(200);
+    }
+  }, []);
+
+  const fetchHosicoPrice = useCallback(async () => {
+    try {
+      let price = 0;
+
+      try {
+        const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.hosico.mint}`);
+
+        if (v3Response.ok) {
+          const v3Data = await v3Response.json();
+          const tokenData = v3Data[config.tokens.hosico.mint];
+          if (tokenData && typeof tokenData.usdPrice === 'number') {
+            price = tokenData.usdPrice;
+            setHosicoPrice(price);
+            return;
+          }
+        } else {
+          console.warn(`Jupiter v3 API returned ${v3Response.status} for HOSICO price`);
+        }
+      } catch (v3Error) {
+        console.warn('Jupiter v3 failed for HOSICO price:', v3Error);
+      }
+
+      try {
+        const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.tokens.hosico.mint}&vs_currencies=usd`);
+
+        if (cgResponse.ok) {
+          const cgData = await cgResponse.json();
+          price = cgData[config.tokens.hosico.mint]?.usd || 0;
+          if (price > 0) {
+            setHosicoPrice(price);
+            return;
+          }
+        }
+      } catch (cgError) {
+        console.warn('CoinGecko failed for HOSICO price:', cgError);
+      }
+
+      try {
+        const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.hosico.mint}`);
+
+        if (v2Response.ok) {
+          const v2Data = await v2Response.json();
+          price = v2Data.data?.[config.tokens.hosico.mint]?.price || 0;
+          if (price > 0) {
+            setHosicoPrice(price);
+            return;
+          }
+        }
+      } catch (v2Error) {
+        console.warn('Jupiter v2 failed for HOSICO price:', v2Error);
+      }
+
+      try {
+        const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.tokens.hosico.mint}&amount=1000000000&slippageBps=50`);
+
+        if (quoteResponse.ok) {
+          const quoteData = await quoteResponse.json();
+          if (quoteData.outAmount) {
+            const solAmount = 1;
+            const hosicoAmount = parseInt(quoteData.outAmount) / Math.pow(10, 6);
+            const impliedPrice = (solAmount * solPrice) / hosicoAmount;
+
+            if (impliedPrice > 0 && impliedPrice < 1000) {
+              setHosicoPrice(impliedPrice);
+              return;
+            }
+          }
+        }
+      } catch (quoteError) {
+        console.warn('Jupiter quote failed for HOSICO price:', quoteError);
+      }
+
+      console.warn('All HOSICO price sources failed, setting to 0');
+      setHosicoPrice(0);
+
+    } catch (error) {
+      console.warn('Failed to fetch HOSICO price:', error);
+      setHosicoPrice(0);
+    }
+  }, [config.tokens.hosico.mint, solPrice]);
+
+  const fetchTokenAccounts = useCallback(async () => {
+    if (!publicKey) {
+      setRawAccounts([]);
+      setTokens([]);
+      setSolBalance(null);
+      return;
+    }
+
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    try {
+      await refreshTokenList();
+    } catch (err: any) {
+      console.error("Failed to fetch token accounts", err);
+      if (mounted) setError(String(err?.message ?? err));
+    } finally {
+      if (mounted) setLoading(false);
+    }
+  }, [publicKey, refreshTokenList]);
+
+  const fetchPageData = useCallback(async (currentPageAccounts: TokenData[]) => {
+    if (currentPageAccounts.length === 0) {
+      setTokens([]);
+      return;
+    }
+
+    let mounted = true;
+    setLoadingPageData(true);
+
+    try {
+      const accountsToShow = await Promise.all(
+        currentPageAccounts.map(async (t: TokenData) => {
+          const options = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: '1',
+              method: 'getAsset',
+              params: { id: t.mint },
+            }),
+          };
+
+          const response = await fetch(config.rpcUrl, options);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          return data;
+        })
+      );
+
+      const formattedAccounts = currentPageAccounts.map((token: TokenData, index: number) => {
+        const assetData = accountsToShow[index];
+        return {
+          mint: token.mint,
+          accountPubkey: token.accountPubkey,
+          uiAmount: token.uiAmount,
+          owner: token.owner,
+          programId: token.programId,
+          state: token.state,
+          closeAuthority: token.closeAuthority,
+          delegate: token.delegate,
+          delegatedAmount: token.delegatedAmount,
+          extensions: token.extensions,
+          image: assetData?.result?.content?.links?.image || '',
+          symbol: assetData?.result?.content?.metadata?.symbol || token.mint.slice(0, 8) + '...',
+          name: assetData?.result?.content?.metadata?.name || 'Unknown Token',
+          priceUSD: token.priceUSD
+        };
+      });
+
+      if (!mounted) return;
+      setTokens(formattedAccounts);
+    } catch (err) {
+      console.error("Failed to fetch page token data:", err);
+      if (mounted) {
+        setTokens(currentPageAccounts);
+      }
+    } finally {
+      if (mounted) setLoadingPageData(false);
+    }
+  }, [config.rpcUrl]);
 
   const paginationData = useMemo(() => {
     const totalPages = Math.ceil(rawAccounts.length / config.itemsPerPage);
@@ -111,7 +480,7 @@ export function Statistics({
 
   const getJupiterSwapInstructions = async (inputMint: string, amount: number, slippageBps: number = 300) => {
     try {
-      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.tokens.hosico.mint}&amount=${Number(amount.toFixed(3)) * LAMPORTS_PER_SOL}&slippageBps=${slippageBps}&restrictIntermediateTokens=true&maxAccounts=40`;
+      const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${config.tokens.hosico.mint}&amount=${Number(amount.toFixed(3)) * LAMPORTS_PER_SOL}&slippageBps=${slippageBps}&restrictIntermediateTokens=true&maxAccounts=10`;
 
       const response = await fetch(quoteUrl);
 
@@ -210,7 +579,6 @@ export function Statistics({
         try {
           const buffer = Buffer.from(transactionData, 'base64');
           transactionBytes = new Uint8Array(buffer);
-          console.log('Successfully decoded transaction as base64');
         } catch (conversionError) {
           console.error('Failed to decode transaction as base64:', conversionError);
           throw new Error('Invalid transaction format - expected base64 encoded transaction');
@@ -221,7 +589,6 @@ export function Statistics({
 
       try {
         const signature = await signAndSendTransaction({ transaction: transactionBytes });
-        console.log(signature);
         return signature;
       } catch (signError) {
         if (signError instanceof Error) {
@@ -250,6 +617,7 @@ export function Statistics({
     }
 
     setIsTransacting(true);
+    setBatchSignature('');
     setTransactionStatus('Preparing batch transaction...');
 
     try {
@@ -277,9 +645,6 @@ export function Statistics({
 
           closeInstructions.push(closeInstruction);
           totalSolToRecover += config.tokenAccountRentExemption;
-
-          console.log(`Added close instruction for ${token.symbol}`);
-
         } catch (error) {
           console.error(`Failed to create close instruction for ${token.symbol}:`, error);
           setTransactionStatus(`❌ Failed to prepare ${token.symbol}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -407,6 +772,21 @@ export function Statistics({
         `Close ${closeInstructions.length} accounts & swap to $HOSICO`
       );
 
+      if (batchSignature && typeof batchSignature === 'object' && 'signature' in batchSignature) {
+        const signature = (batchSignature as any).signature;
+        if (signature instanceof Uint8Array) {
+          setBatchSignature(bs58.encode(signature));
+        } else if (typeof signature === 'string') {
+          setBatchSignature(signature);
+        } else {
+          setBatchSignature('Transaction completed successfully');
+        }
+      } else if (typeof batchSignature === 'string') {
+        setBatchSignature(batchSignature);
+      } else {
+        setBatchSignature('Transaction completed successfully');
+      }
+
       if (totalSolToRecover > 0.001) {
         setTransactionStatus(`✅ Successfully closed ${closeInstructions.length} accounts and swapped ${totalSolToRecover.toFixed(3)} SOL to $HOSICO!`);
       } else {
@@ -414,6 +794,10 @@ export function Statistics({
       }
 
       setSelectedTokens(new Set());
+
+      setTimeout(() => {
+        refreshTokenList();
+      }, 2000);
 
     } catch (error) {
       console.error('Critical error in batch conversion process:', error);
@@ -423,396 +807,31 @@ export function Statistics({
       setIsTransacting(false);
       setTimeout(() => {
         setTransactionStatus('');
+        setBatchSignature(''); 
       }, 15000);
     }
   };
 
   useEffect(() => {
-    const fetchSolPrice = async () => {
-      try {
-        let price = 200; // fallback
-
-        try {
-          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`);
-
-          if (v3Response.ok) {
-            const v3Data = await v3Response.json();
-            const solData = v3Data['So11111111111111111111111111111111111111112'];
-            if (solData && typeof solData.usdPrice === 'number') {
-              price = solData.usdPrice;
-              console.log("SOL price from Jupiter v3:", price);
-              setSolPrice(price);
-              return;
-            }
-          }
-        } catch (v3Error) {
-          console.warn('Jupiter v3 failed for SOL price:', v3Error);
-        }
-
-        try {
-          const cgResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-
-          if (cgResponse.ok) {
-            const cgData = await cgResponse.json();
-            price = cgData.solana?.usd || 200;
-            if (price > 0) {
-              console.log("SOL price from CoinGecko:", price);
-              setSolPrice(price);
-              return;
-            }
-          }
-        } catch (cgError) {
-          console.warn('CoinGecko failed for SOL price:', cgError);
-        }
-
-        try {
-          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112`);
-
-          if (v2Response.ok) {
-            const v2Data = await v2Response.json();
-            price = v2Data.data?.['So11111111111111111111111111111111111111112']?.price || 200;
-            if (price > 0) {
-              console.log("SOL price from Jupiter v2:", price);
-              setSolPrice(price);
-              return;
-            }
-          }
-        } catch (v2Error) {
-          console.warn('Jupiter v2 failed for SOL price:', v2Error);
-        }
-
-        console.log('Using fallback SOL price:', price);
-        setSolPrice(price);
-
-      } catch (error) {
-        console.warn('Failed to fetch SOL price, using fallback:', error);
-        setSolPrice(200);
-      }
-    };
-
     fetchSolPrice();
     const interval = setInterval(fetchSolPrice, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchSolPrice]);
 
   useEffect(() => {
-    const fetchHosicoPrice = async () => {
-      console.log('Fetching HOSICO price...');
-
-      try {
-        let price = 0;
-
-        try {
-          const v3Response = await fetch(`https://lite-api.jup.ag/price/v3?ids=${config.tokens.hosico.mint}`);
-
-          if (v3Response.ok) {
-            const v3Data = await v3Response.json();
-            const tokenData = v3Data[config.tokens.hosico.mint];
-            if (tokenData && typeof tokenData.usdPrice === 'number') {
-              price = tokenData.usdPrice;
-              setHosicoPrice(price);
-              return;
-            }
-          } else {
-            console.warn(`Jupiter v3 API returned ${v3Response.status} for HOSICO price`);
-          }
-        } catch (v3Error) {
-          console.warn('Jupiter v3 failed for HOSICO price:', v3Error);
-        }
-
-        try {
-          const cgResponse = await fetch(`https://api.coingecko.com/api/v3/simple/token_price/solana?contract_addresses=${config.tokens.hosico.mint}&vs_currencies=usd`);
-
-          if (cgResponse.ok) {
-            const cgData = await cgResponse.json();
-            price = cgData[config.tokens.hosico.mint]?.usd || 0;
-            if (price > 0) {
-              setHosicoPrice(price);
-              return;
-            }
-          }
-        } catch (cgError) {
-          console.warn('CoinGecko failed for HOSICO price:', cgError);
-        }
-
-        try {
-          const v2Response = await fetch(`https://api.jup.ag/price/v2?ids=${config.tokens.hosico.mint}`);
-
-          if (v2Response.ok) {
-            const v2Data = await v2Response.json();
-            price = v2Data.data?.[config.tokens.hosico.mint]?.price || 0;
-            if (price > 0) {
-              console.log("HOSICO price from Jupiter v2:", price);
-              setHosicoPrice(price);
-              return;
-            }
-          }
-        } catch (v2Error) {
-          console.warn('Jupiter v2 failed for HOSICO price:', v2Error);
-        }
-
-        try {
-          const quoteResponse = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=${config.tokens.hosico.mint}&amount=1000000000&slippageBps=50`);
-
-          if (quoteResponse.ok) {
-            const quoteData = await quoteResponse.json();
-            if (quoteData.outAmount) {
-              const solAmount = 1;
-              const hosicoAmount = parseInt(quoteData.outAmount) / Math.pow(10, 6);
-              const impliedPrice = (solAmount * solPrice) / hosicoAmount;
-
-              if (impliedPrice > 0 && impliedPrice < 1000) {
-                console.log("HOSICO price derived from Jupiter quote:", impliedPrice);
-                setHosicoPrice(impliedPrice);
-                return;
-              }
-            }
-          }
-        } catch (quoteError) {
-          console.warn('Jupiter quote failed for HOSICO price:', quoteError);
-        }
-
-        console.warn('All HOSICO price sources failed, setting to 0');
-        setHosicoPrice(0);
-
-      } catch (error) {
-        console.warn('Failed to fetch HOSICO price:', error);
-        setHosicoPrice(0);
-      }
-    };
-
     fetchHosicoPrice();
     const interval = setInterval(fetchHosicoPrice, 60000);
     return () => clearInterval(interval);
-  }, [config.tokens.hosico.mint, solPrice]);
+  }, [fetchHosicoPrice]);
 
   useEffect(() => {
-    if (!publicKey) {
-      setRawAccounts([]);
-      setTokens([]);
-      setSolBalance(null);
-      return;
-    }
-
-    let mounted = true;
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const standardTokenProgramId = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-        const token2022ProgramId = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-
-        const [standardTokensResp, token2022Resp] = await Promise.all([
-          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: standardTokenProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send(),
-          client.rpc.getTokenAccountsByOwner(publicKey as any, { programId: token2022ProgramId as any }, { encoding: "jsonParsed" as any, commitment: "confirmed" }).send()
-        ]);
-
-        const allTokenAccounts = [
-          ...((standardTokensResp as any)?.value ?? []).map((item: any) => ({ ...item, programId: standardTokenProgramId })),
-          ...((token2022Resp as any)?.value ?? []).map((item: any) => ({ ...item, programId: token2022ProgramId }))
-        ];
-
-        const accounts: TokenData[] = allTokenAccounts.map((item: any): TokenData | null => {
-          try {
-            if (item?.account?.data?.parsed?.info?.tokenAmount?.decimals === 0) return null;
-            if (item?.account?.data?.parsed?.info?.mint === config.tokens.hosico.mint) return null;
-            if (item?.account?.data?.parsed?.info?.mint === config.tokens.sol.mint) return null;
-
-            const parsed = item.account?.data?.parsed ?? {};
-            const info = parsed.info ?? {};
-            const tokenAmount = info.tokenAmount ?? {};
-            const uiAmount = typeof tokenAmount.uiAmount === "number" ? tokenAmount.uiAmount : (tokenAmount.uiAmountString ? Number(tokenAmount.uiAmountString) : 0);
-
-            if (uiAmount === 0) {
-              const pubkey = item.pubkey;
-              const mint = info.mint;
-              const owner = info.owner;
-
-              const state = info.state;
-              const closeAuthority = info.closeAuthority;
-              const delegate = info.delegate;
-              const delegatedAmount = info.delegatedAmount;
-              const isNative = info.isNative;
-
-              const extensions = info.extensions;
-              let hasWithheldFees = false;
-
-              if (extensions && Array.isArray(extensions)) {
-                for (const extension of extensions) {
-                  if (extension.extension === 'transferFeeAmount') {
-                    const withheldAmount = extension.state?.withheldAmount;
-                    if (withheldAmount) {
-                      const withheldValue = typeof withheldAmount === 'bigint' ? Number(withheldAmount) : Number(withheldAmount);
-                      if (withheldValue > 0) {
-                        hasWithheldFees = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-
-              if (hasWithheldFees) {
-                return null;
-              }
-
-              if (isNative) {
-                return null;
-              }
-
-              if (state && state !== 'initialized') {
-                return null;
-              }
-
-              if (delegate && delegatedAmount && Number(delegatedAmount) > 0) {
-                return null;
-              }
-
-              if (closeAuthority && closeAuthority !== owner) {
-                return null;
-              }
-
-              if (owner !== publicKey) {
-                return null;
-              }
-
-              return {
-                mint,
-                accountPubkey: pubkey,
-                uiAmount,
-                owner,
-                programId: item.programId,
-                state,
-                closeAuthority,
-                delegate,
-                delegatedAmount,
-                extensions
-              };
-            } else {
-              return null;
-            }
-          } catch (innerErr) {
-            console.warn("malformed token account item", innerErr, item);
-            return null;
-          }
-        }).filter(Boolean) as TokenData[];
-
-        let sol = null;
-
-        try {
-          const balRespPromise = client.rpc.getBalance(publicKey as any, { commitment: "confirmed" });
-          const balResp = await balRespPromise.send();
-          const lamports = typeof balResp === "number" ? balResp : ((balResp as any)?.value ?? null);
-          if (lamports != null) {
-            sol = Number(lamports) / LAMPORTS_PER_SOL;
-          }
-        } catch (balErr) {
-          console.warn("failed to fetch SOL balance", balErr);
-        }
-
-        const allTokenMints = accounts.map(t => t.mint);
-        const priceMap = await fetchTokenPrices(allTokenMints);
-
-        const highValueTokens = accounts.filter(token => {
-          const priceUSD = priceMap[token.mint] || 0;
-          const totalValueUSD = (token.uiAmount || 0) * priceUSD;
-          return totalValueUSD < 1.0;
-        });
-
-        const basicAccounts = highValueTokens.map(token => ({
-          ...token,
-          priceUSD: priceMap[token.mint] || 0,
-          symbol: token.mint.slice(0, 8) + '...',
-          name: 'Loading...',
-          image: ''
-        }));
-
-        if (!mounted) return;
-        setRawAccounts(basicAccounts);
-        setSolBalance(sol);
-      } catch (err: any) {
-        console.error("rpc error", err);
-        if (mounted) setError(String(err?.message ?? err));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [publicKey, client]);
+    fetchTokenAccounts();
+  }, [fetchTokenAccounts]);
 
   useEffect(() => {
     const { currentPageAccounts } = paginationData;
-
-    if (currentPageAccounts.length === 0) {
-      setTokens([]);
-      return;
-    }
-
-    let mounted = true;
-    setLoadingPageData(true);
-
-    (async () => {
-      try {
-        const accountsToShow = await Promise.all(
-          currentPageAccounts.map(async (t: TokenData) => {
-            const options = {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                id: '1',
-                method: 'getAsset',
-                params: { id: t.mint },
-              }),
-            };
-
-            const response = await fetch(config.rpcUrl, options);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            return data;
-          })
-        );
-
-        const formattedAccounts = currentPageAccounts.map((token: TokenData, index: number) => {
-          const assetData = accountsToShow[index];
-          return {
-            mint: token.mint,
-            accountPubkey: token.accountPubkey,
-            uiAmount: token.uiAmount,
-            owner: token.owner,
-            programId: token.programId,
-            state: token.state,
-            closeAuthority: token.closeAuthority,
-            delegate: token.delegate,
-            delegatedAmount: token.delegatedAmount,
-            extensions: token.extensions,
-            image: assetData?.result?.content?.links?.image || '',
-            symbol: assetData?.result?.content?.metadata?.symbol || token.mint.slice(0, 8) + '...',
-            name: assetData?.result?.content?.metadata?.name || 'Unknown Token',
-            priceUSD: token.priceUSD
-          };
-        });
-
-        if (!mounted) return;
-        setTokens(formattedAccounts);
-      } catch (err) {
-        console.error("Failed to fetch page token data:", err);
-        if (mounted) {
-          setTokens(currentPageAccounts);
-        }
-      } finally {
-        if (mounted) setLoadingPageData(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [paginationData, config.rpcUrl]);
+    fetchPageData(currentPageAccounts);
+  }, [paginationData, fetchPageData]);
 
   return (
     <div id="statsistics" className="statistics">
@@ -854,14 +873,6 @@ export function Statistics({
             <div className="grid grid-cols-1 gap-4">
               <div className="error-state">
                 Error: {error}
-              </div>
-            </div>
-          )}
-
-          {!loading && !error && tokens.length === 0 && (
-            <div className="grid grid-cols-1 gap-4">
-              <div className="empty-state">
-                No tokens found with value {'<'}$1.
               </div>
             </div>
           )}
@@ -990,6 +1001,41 @@ export function Statistics({
         {transactionStatus && (
           <div className="transaction-status">
             {transactionStatus}
+          </div>
+        )}
+
+        {batchSignature && (
+          <div className="batch-signature">
+            <div className="signature-header">
+              <h4>Transaction Signature:</h4>
+              <button 
+                className="close-btn"
+                onClick={() => setBatchSignature('')}
+                title="Close signature"
+              >
+                ×
+              </button>
+            </div>
+            <div className="signature-container">
+              <code className="signature-text">{batchSignature}</code>
+              <button 
+                className="copy-btn"
+                onClick={() => navigator.clipboard.writeText(batchSignature)}
+                title="Copy signature to clipboard"
+              >
+                📋
+              </button>
+            </div>
+            <div className="signature-links">
+              <a 
+                href={`https://solscan.io/tx/${batchSignature}${config.clusterId === 'devnet' ? '?cluster=devnet' : ''}`}
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="explorer-link"
+              >
+                View on Solscan
+              </a>
+            </div>
           </div>
         )}
 
