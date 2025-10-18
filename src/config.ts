@@ -13,7 +13,7 @@ const CLUSTER_ID = "mainnet"
 const ITEMS_PER_PAGE = 8
 
 const TX_TIP = 0.007 // 0.7% transaction tip
-const TIP_WALLET = "D5TiA9gpwdXgAc1KcMr6uWLUKBwfAR5xbhAMofda4NcB"
+const TIP_WALLET = "HLQCJfrzHnk8vd71ueJixX9BDPDTEg77gF8oHFa1uTJy"
 
 export const config = {
     rpcUrl: RPC_URL,
