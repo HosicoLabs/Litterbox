@@ -6,6 +6,10 @@ import { JSX } from "react";
 export const metadata: Metadata = {
   title: "Hosico Litter Box",
   description: "Turn your shitcoin and trash into $HOSICO",
+  icons: {
+    icon: "/favicon.jpg",
+    apple: "/favicon.jpg",
+  },
 };
 
 export default function RootLayout({ children }): JSX.Element {
