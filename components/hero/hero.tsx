@@ -1,4 +1,6 @@
-export function Hero() {
+import { JSX } from "react";
+
+export function Hero(): JSX.Element {
   return (
     <>
       <section className="hero">

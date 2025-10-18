@@ -1,4 +1,10 @@
-const LINKS = [
+import { JSX } from "react";
+
+const LINKS: {
+  label: string;
+  href: string;
+  icon: JSX.Element;
+}[] = [
   {
     label: "Buy Hosico",
     href: "#",
@@ -82,7 +88,8 @@ const LINKS = [
     ),
   },
 ];
-export function Footer() {
+
+export function Footer(): JSX.Element {
   return (
     <div className="footer">
       <picture className="img img_bg">

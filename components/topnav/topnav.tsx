@@ -4,10 +4,13 @@ import { useState } from "react";
 import { WalletDropdown } from "../wallet-dropdown/wallet-dropdown";
 
 export function Topnav() {
-  const [opened, setOpened] = useState(false);
-  const [target, setTarget] = useState("#");
+  const [opened, setOpened] = useState<boolean>(false);
+  const [target, setTarget] = useState<string>("#");
 
-  const URLS = [
+  const URLS: {
+    url: string;
+    label: string;
+  }[] = [
     {
       url: "#",
       label: "Home",

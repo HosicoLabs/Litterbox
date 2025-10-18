@@ -1,7 +1,7 @@
 import "./index.scss";
 import "./globals.css";
-import { Topnav } from "../components/topnav/topnav"; 
-import { AppProviders } from "../components/providers/app-providers"; 
+import { Topnav } from "../components/topnav/topnav";
+import { AppProviders } from "../components/providers/app-providers";
 
 export const metadata = {
   title: "Hosico Litter Box",
@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AppProviders>        
+        <AppProviders>
           <Topnav />
           {children}
           <video
