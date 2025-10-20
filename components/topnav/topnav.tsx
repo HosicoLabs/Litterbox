@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { WalletDropdown } from "../wallet-dropdown/wallet-dropdown";
+import Link from "next/link";
 
 export function Topnav() {
   const [opened, setOpened] = useState<boolean>(false);
@@ -11,19 +12,19 @@ export function Topnav() {
     url: string;
     label: string;
   }[] = [
-    {
-      url: "#",
-      label: "Home",
-    },
-    {
-      url: "#hosico",
-      label: "Hosico",
-    },
-    {
-      url: "#hoscoverse",
-      label: "Hosicoverse",
-    },
-  ];
+      {
+        url: "#",
+        label: "Home",
+      },
+      {
+        url: "https://hosico.cat",
+        label: "Hosico",
+      },
+      {
+        url: "https://hosicoverse.hosico.cat",
+        label: "Hosicoverse",
+      },
+    ];
 
   function open() {
     setOpened(() => true);
@@ -98,7 +99,13 @@ export function Topnav() {
                     setTarget(() => e.url);
                   }}
                 >
-                  <a href={e.url}>{e.label}</a>
+                  {
+                    e.label === "Home" ? (
+                      <Link href={e.url}>{e.label}</Link>
+                    ) : (
+                      <Link href={e.url} target="_blank" rel="noopener noreferrer">{e.label}</Link>
+                    )
+                  }
                 </li>
               );
             })}

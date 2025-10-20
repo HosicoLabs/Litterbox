@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { JSX } from "react";
 
 const LINKS: {
@@ -7,7 +8,7 @@ const LINKS: {
 }[] = [
   {
     label: "Buy Hosico",
-    href: "#",
+    href: "https://jup.ag/swap/SOL-Hosico",
     icon: (
       <svg
         className="icon"
@@ -28,7 +29,7 @@ const LINKS: {
   },
   {
     label: "x twitter",
-    href: "#",
+    href: "https://x.com/Hosico_on_sol",
     icon: (
       <svg
         className="icon"
@@ -47,7 +48,7 @@ const LINKS: {
   },
   {
     label: "telegram",
-    href: "#",
+    href: "https://t.me/hosicostarchild/1",
     icon: (
       <svg
         className="icon"
@@ -66,7 +67,7 @@ const LINKS: {
   },
   {
     label: "official website",
-    href: "#",
+    href: "https://hosico.cat",
     icon: (
       <svg
         className="icon"
@@ -105,10 +106,10 @@ export function Footer(): JSX.Element {
           {LINKS.map((link, i) => {
             return (
               <li key={i} className="link">
-                <a href={link.href}>
+                <Link href={link.href} target="_blank" rel="noopener noreferrer">
                   {link.icon}
                   <span className="label">{link.label}</span>
-                </a>
+                </Link>
               </li>
             );
           })}
