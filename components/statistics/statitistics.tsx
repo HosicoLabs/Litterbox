@@ -573,22 +573,43 @@ export function Statistics({
       }
 
       let transactionBytes: Uint8Array;
+      let transactionBase64: string;
 
       if (typeof transactionData === 'string') {
         try {
           const buffer = Buffer.from(transactionData, 'base64');
           transactionBytes = new Uint8Array(buffer);
+          transactionBase64 = transactionData;
         } catch (conversionError) {
           console.error('Failed to decode transaction as base64:', conversionError);
           throw new Error('Invalid transaction format - expected base64 encoded transaction');
         }
       } else {
         transactionBytes = transactionData;
+        transactionBase64 = Buffer.from(transactionData).toString('base64');
       }
 
       try {
+        console.log('Simulating transaction before signing...');
+        
+        try {
+          const simulationResult = await client.rpc.simulateTransaction(transactionBase64 as any, {
+            sigVerify: false,
+            commitment: 'confirmed'
+          }).send();
+
+          if ('value' in simulationResult && simulationResult.value.err) {
+            console.warn(`Transaction simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
+          } else {
+            console.log('Transaction simulation successful:', simulationResult);
+          }
+        } catch (simError) {
+          console.warn('Transaction simulation failed:', simError);
+        }
+
         const signature = await signAndSendTransaction({ transaction: transactionBytes });
         return signature;
+        
       } catch (signError) {
         if (signError instanceof Error) {
           if (signError.message.includes('User rejected') ||
@@ -765,6 +786,15 @@ export function Statistics({
 
       const compiledTransaction = compileTransaction(batchTransaction);
       const serializedTransaction = getBase64EncodedWireTransaction(compiledTransaction);
+
+      const transactionSize = serializedTransaction.length;
+      console.log(`Transaction size: ${transactionSize} characters (base64)`);
+      
+      const estimatedBytes = Math.ceil(transactionSize * 0.75);
+      if (estimatedBytes > 1100) {
+        console.warn(`⚠️ Transaction is large (${estimatedBytes} bytes estimated). Consider splitting into multiple transactions.`);
+        setTransactionStatus(`⚠️ Large transaction detected (${estimatedBytes} bytes). This may trigger warnings in some wallets.`);
+      }
 
       const batchSignature = await executeTransaction(
         serializedTransaction,
